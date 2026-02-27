@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Lock, Crown, Sparkles, Check, ChevronDown, TrendingUp, TrendingDown, Activity, Zap } from 'lucide-react';
+import { Search, Lock, Crown, Sparkles, Check, ChevronDown, TrendingUp, TrendingDown, Activity, Zap, BookmarkPlus } from 'lucide-react';
 import TradingViewChartCard from '@/components/TradingViewChartCard';
+import { supabase } from '@/lib/supabase';
 
 const ASSETS: Record<string, { value: string; label: string; description: string }[]> = {
     forex: [
@@ -80,6 +81,8 @@ export default function NovaAnalise() {
         riskReward: string;
     } | null>(null);
     const [apiError, setApiError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
     const assets = ASSETS[assetType] ?? [];
     const filtered = assets.filter(a =>
@@ -147,6 +150,28 @@ export default function NovaAnalise() {
             setApiError('Erro de rede. Verifique sua conexão.');
             setProgress(100);
             setTimeout(() => setPhase('results'), 400);
+        }
+    };
+
+    const saveAnalysis = async () => {
+        if (!analysisResult || !selectedAsset) return;
+        setSaving(true);
+        setSaveStatus('idle');
+        try {
+            const { error } = await supabase.from('trading_history').insert({
+                ativo: selectedAsset.label,
+                timeframe,
+                preco: analysisResult.price,
+                sinal_ia: analysisResult.signal,
+                rsi: analysisResult.rsi14,
+                tendencia: analysisResult.trend,
+            });
+            setSaveStatus(error ? 'error' : 'success');
+        } catch {
+            setSaveStatus('error');
+        } finally {
+            setSaving(false);
+            setTimeout(() => setSaveStatus('idle'), 3000);
         }
     };
 
@@ -520,8 +545,28 @@ export default function NovaAnalise() {
                 </div>
             </div>
 
-            <div style={{ textAlign: 'center', marginTop: '24px' }}>
-                <button onClick={() => { setPhase('config'); setSelectedAsset(null); setAssetType(''); }} style={{ padding: '12px 32px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '24px', flexWrap: 'wrap' }}>
+                {/* Botão Salvar Análise */}
+                <button
+                    onClick={saveAnalysis}
+                    disabled={saving || !analysisResult || saveStatus === 'success'}
+                    style={{
+                        padding: '12px 28px', borderRadius: '12px', border: 'none',
+                        background: saveStatus === 'success' ? 'linear-gradient(135deg, #00e676, #00b248)' : saveStatus === 'error' ? 'rgba(239,68,68,0.15)' : 'linear-gradient(135deg, #00e5ff22, #00b2ff22)',
+                        borderWidth: '1px', borderStyle: 'solid',
+                        borderColor: saveStatus === 'success' ? '#00e676' : saveStatus === 'error' ? '#ef4444' : 'rgba(0,229,255,0.3)',
+                        color: saveStatus === 'success' ? '#000' : saveStatus === 'error' ? '#ef4444' : '#00e5ff',
+                        fontWeight: 700, fontSize: '14px', cursor: saving ? 'wait' : 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        opacity: saving ? 0.7 : 1,
+                        transition: 'all 0.3s ease',
+                    }}
+                >
+                    <BookmarkPlus style={{ width: '16px', height: '16px' }} />
+                    {saving ? 'Salvando...' : saveStatus === 'success' ? '✓ Salvo no Diário!' : saveStatus === 'error' ? '✗ Erro ao Salvar' : 'Salvar no Diário de Trade'}
+                </button>
+                {/* Botão Nova Análise */}
+                <button onClick={() => { setPhase('config'); setSelectedAsset(null); setAssetType(''); setSaveStatus('idle'); }} style={{ padding: '12px 32px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
                     ← Nova Análise
                 </button>
             </div>
