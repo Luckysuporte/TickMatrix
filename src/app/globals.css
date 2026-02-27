@@ -1,26 +1,154 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-vortex-dark: #0a0a0a;
+  --color-vortex-card: #121212;
+  --color-vortex-cyan: #00e5ff;
+  --color-vortex-orange: #ff9900;
+  --color-vortex-green: #00e676;
+  --color-vortex-red: #ff3d00;
+  --blur-xs: 2px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #0a0a0a;
+  --foreground: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, sans-serif;
+  min-height: 100vh;
+}
+
+/* Centralização do Site */
+.site-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* GLOW AND NEON UTILITIES */
+.glow-cyan {
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+}
+
+.glow-orange {
+  box-shadow: 0 0 15px rgba(255, 153, 0, 0.15);
+}
+
+/* VORTEX CARDS */
+.vortex-card {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.vortex-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+.vortex-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-2px);
+}
+
+.vortex-card.card-cyan {
+  border: 1px solid rgba(0, 229, 255, 0.4);
+}
+
+.vortex-card.card-cyan:hover {
+  background: radial-gradient(circle at 10% 20%, rgba(0, 229, 255, 0.15) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.15);
+  border-color: rgba(0, 229, 255, 0.8);
+}
+
+.vortex-card.card-orange {
+  border: 1px solid rgba(255, 153, 0, 0.4);
+}
+
+.vortex-card.card-orange:hover {
+  background: radial-gradient(circle at 10% 20%, rgba(255, 153, 0, 0.15) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: 0 0 40px rgba(255, 153, 0, 0.15);
+  border-color: rgba(255, 153, 0, 0.8);
+}
+
+.vortex-card.card-green {
+  border: 1px solid rgba(0, 230, 118, 0.4);
+}
+
+.vortex-card.card-green:hover {
+  background: radial-gradient(circle at 5% 50%, rgba(0, 230, 118, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: 0 0 40px rgba(0, 230, 118, 0.1);
+  border-color: rgba(0, 230, 118, 0.8);
+}
+
+.vortex-card.card-red {
+  border: 1px solid rgba(255, 61, 0, 0.4);
+}
+
+.vortex-card.card-red:hover {
+  background: radial-gradient(circle at 5% 50%, rgba(255, 61, 0, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: 0 0 40px rgba(255, 61, 0, 0.1);
+  border-color: rgba(255, 61, 0, 0.8);
+}
+
+.vortex-card.card-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* BADGES AND SMALL PILLS */
+.v-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.v-badge-green {
+  background: rgba(0, 230, 118, 0.1);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.2);
+}
+
+.v-badge-orange {
+  background: rgba(255, 153, 0, 0.1);
+  color: #ff9900;
+  border: 1px solid rgba(255, 153, 0, 0.2);
+}
+
+.v-badge-cyan {
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.v-badge-dark {
+  background: rgba(255, 255, 255, 0.05);
+  color: #888;
 }
