@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Lock, Crown, Sparkles, Check, ChevronDown, TrendingUp, TrendingDown, Activity, Zap, BookmarkPlus } from 'lucide-react';
+import { Search, Lock, Crown, Sparkles, Check, ChevronDown, TrendingUp, TrendingDown, Activity, Zap, BookmarkPlus, Star } from 'lucide-react';
 import TradingViewChartCard from '@/components/TradingViewChartCard';
 import { supabase } from '@/lib/supabase';
+import { toggleFavorite, isFavorite } from '@/lib/favorites';
 
 const ASSETS: Record<string, { value: string; label: string; description: string }[]> = {
     forex: [
@@ -83,6 +84,7 @@ export default function NovaAnalise() {
     const [apiError, setApiError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [isFav, setIsFav] = useState(false);
 
     const assets = ASSETS[assetType] ?? [];
     const filtered = assets.filter(a =>
@@ -143,6 +145,8 @@ export default function NovaAnalise() {
                 setAnalysisResult(data);
                 setProgress(100);
                 setLoadingStep(LOADING_STEPS.length - 1);
+                // atualiza estado do favorito para o ativo atual
+                setIsFav(isFavorite(selectedAsset.value));
                 setTimeout(() => setPhase('results'), 600);
             }
         } catch (err) {
@@ -554,6 +558,25 @@ export default function NovaAnalise() {
                     </div>
                 )}
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {/* Botão Favoritar */}
+                    <button
+                        onClick={() => {
+                            if (!selectedAsset) return;
+                            const nowFav = toggleFavorite({ value: selectedAsset.value, label: selectedAsset.label, description: selectedAsset.description, assetType });
+                            setIsFav(nowFav);
+                        }}
+                        title={isFav ? 'Remover dos favoritos' : 'Adicionar ao Radar de Favoritos'}
+                        style={{
+                            padding: '12px 20px', borderRadius: '12px', border: `1px solid ${isFav ? 'rgba(255,204,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                            background: isFav ? 'rgba(255,204,0,0.12)' : 'transparent',
+                            color: isFav ? '#ffcc00' : '#94a3b8', fontWeight: 700, fontSize: '14px',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px',
+                            transition: 'all 0.25s ease',
+                        }}
+                    >
+                        <Star style={{ width: '16px', height: '16px', fill: isFav ? '#ffcc00' : 'none' }} />
+                        {isFav ? 'No Radar' : 'Favoritar'}
+                    </button>
                     {/* Botão Salvar no Histórico */}
                     <button
                         onClick={saveAnalysis}
