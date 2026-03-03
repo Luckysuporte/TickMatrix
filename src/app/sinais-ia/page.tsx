@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// ─── Mock data ─────────────────────────────────────────────────────────────
 const RECENT_SIGNALS = [
     { id: 1, asset: 'GBPUSD', direction: 'buy', badge: 'Take', badgeColor: '#00e676', result: '+$21.10', pct: '+1.10%', time: '9h atrás', stats: '0.0T  +$21.1  1.0x  +$211.00', positive: true },
     { id: 2, asset: 'GBPUSD', direction: 'buy', badge: 'Take', badgeColor: '#00e676', result: '+$44.20', pct: '+0.91%', time: '5h atrás', stats: '0.0T  +$44.7  1.0x  +$442.00', positive: true },
@@ -14,48 +14,106 @@ const RECENT_SIGNALS = [
     { id: 6, asset: 'AUDUSD', direction: 'sell', badge: 'Stop', badgeColor: '#ff3d00', result: '-$33.30', pct: '-0.70%', time: '19h atrás', stats: '0.0T  -$3.25  1.0x  -$333.00', positive: false },
 ];
 
-// ─── Radar types ──────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────
+type TFData = { signal: string; signalStrength: string };
+
 type RadarItem = {
     asset: FavoriteAsset;
     price: string;
     rsi14: string;
+    trend: string;
+    // sinais por timeframe
+    m5: TFData | null;
+    m15: TFData | null;
+    h1: TFData | null;
+    // score 1-3
+    stars: number;
+    // sinal dominante (baseado no m5)
     signal: string;
     signalStrength: string;
-    trend: string;
     loading: boolean;
     error: boolean;
-    flashing: boolean;  // piscar quando sinal muda
+    flashing: boolean;
     lastUpdate: Date | null;
 };
 
-// ─── Audio helper (Web Audio API) ─────────────────────────────────────────────
-function playAlert(type: 'buy' | 'sell') {
+// ─── Audio helper ──────────────────────────────────────────────────────────
+function playAlert(stars: number, direction: 'buy' | 'sell') {
     try {
         const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = type === 'buy' ? 880 : 440;
-        osc.type = 'sine';
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.4);
-    } catch { /* silencioso se bloqueado pelo browser */ }
+
+        if (stars >= 3) {
+            // Alerta de Elite: 3 beeps ascendentes
+            [0, 0.18, 0.36].forEach((offset, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.frequency.value = direction === 'buy' ? 660 + i * 220 : 880 - i * 220;
+                osc.type = 'sine';
+                gain.gain.setValueAtTime(0.18, ctx.currentTime + offset);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.15);
+                osc.start(ctx.currentTime + offset);
+                osc.stop(ctx.currentTime + offset + 0.15);
+            });
+        } else {
+            // Alerta simples: 1 beep
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = direction === 'buy' ? 880 : 440;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.13, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.start(); osc.stop(ctx.currentTime + 0.35);
+        }
+    } catch { /* silencioso se bloqueado */ }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Score de confluência ──────────────────────────────────────────────────
+// Retorna 1-3 estrelas com base em quantos TFs têm o mesmo sinal
+function calcStars(m5: TFData | null, m15: TFData | null, h1: TFData | null): { stars: number; direction: string } {
+    const base = m5?.signal;
+    if (!base || base === 'NEUTRO') return { stars: 1, direction: base ?? 'NEUTRO' };
+    let count = 1;
+    if (m15?.signal === base) count++;
+    if (h1?.signal === base) count++;
+    return { stars: count, direction: base };
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
 const sigColor = (sig: string) =>
     sig === 'COMPRA' ? '#00e676' : sig === 'VENDA' ? '#ef4444' : '#64748b';
 
-const sigBg = (sig: string) =>
-    sig === 'COMPRA' ? 'rgba(0,230,118,0.08)' : sig === 'VENDA' ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)';
+// ─── StarBadge ─────────────────────────────────────────────────────────────
+function StarBadge({ stars, direction }: { stars: number; direction: string }) {
+    const color = direction === 'COMPRA' ? '#ffcc00' : direction === 'VENDA' ? '#ff9900' : '#334155';
+    return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '13px' }} title={`${stars} estrela(s) de confluência`}>
+            {Array.from({ length: 3 }).map((_, i) => (
+                <Star
+                    key={i}
+                    style={{ width: '13px', height: '13px', color: i < stars ? color : '#1e293b', fill: i < stars ? color : 'none' }}
+                />
+            ))}
+        </span>
+    );
+}
 
-const isStrong = (sig: string, str: string) =>
-    (sig === 'COMPRA' || sig === 'VENDA') && str === 'FORTE';
+// ─── TF chip ───────────────────────────────────────────────────────────────
+function TFChip({ label, data }: { label: string; data: TFData | null }) {
+    const c = data ? sigColor(data.signal) : '#334155';
+    return (
+        <span style={{
+            fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px',
+            background: `${c}18`, color: c, border: `1px solid ${c}30`,
+        }}>
+            {label} {data ? data.signal.slice(0, 1) : '?'}
+            {data?.signalStrength === 'FORTE' ? '★' : ''}
+        </span>
+    );
+}
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Main Page ─────────────────────────────────────────────────────────────
 export default function SinaisIA() {
     const [active, setActive] = useState(false);
     const [radarData, setRadarData] = useState<Record<string, RadarItem>>({});
@@ -63,43 +121,63 @@ export default function SinaisIA() {
     const [countdown, setCountdown] = useState(60);
     const prevSignals = useRef<Record<string, string>>({});
 
-    // Carrega favoritos do localStorage (SSR-safe)
-    useEffect(() => {
-        setFavorites(getFavorites());
-    }, []);
+    useEffect(() => { setFavorites(getFavorites()); }, []);
 
-    // Fetch de um único favorito
-    const fetchOne = async (fav: FavoriteAsset) => {
-        // símbolo sem barra para a API
+    // Busca único TF de um ativo
+    const fetchTF = async (fav: FavoriteAsset, timeframe: string): Promise<TFData> => {
         const symbol = fav.value.replace('/', '');
+        const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol, timeframe, assetType: fav.assetType }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error ?? 'err');
+        return { signal: data.signal, signalStrength: data.signalStrength };
+    };
+
+    // Busca os 3 TFs em paralelo para 1 ativo e atualiza o estado
+    const fetchOne = async (fav: FavoriteAsset) => {
         try {
-            const res = await fetch('/api/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol, timeframe: '5m', assetType: fav.assetType }),
-            });
-            const data = await res.json();
-            if (!res.ok || data.error) throw new Error(data.error ?? 'err');
+            const [m5, m15, h1, mainData] = await Promise.all([
+                fetchTF(fav, '5m'),
+                fetchTF(fav, '15m'),
+                fetchTF(fav, '1h'),
+                // busca m5 detalhado (preço, rsi, trend)
+                (async () => {
+                    const symbol = fav.value.replace('/', '');
+                    const res = await fetch('/api/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ symbol, timeframe: '5m', assetType: fav.assetType }),
+                    });
+                    return res.json();
+                })(),
+            ]);
 
-            const newSig: string = data.signal;
+            const { stars, direction } = calcStars(m5, m15, h1);
             const oldSig = prevSignals.current[fav.value];
-            const changed = oldSig !== undefined && oldSig !== newSig;
-            prevSignals.current[fav.value] = newSig;
+            const changed = oldSig !== undefined && oldSig !== direction;
+            prevSignals.current[fav.value] = direction;
 
-            // dispara alerta se sinal mudou
             if (changed) {
-                playAlert(newSig === 'COMPRA' ? 'buy' : 'sell');
+                playAlert(stars, direction === 'COMPRA' ? 'buy' : 'sell');
+            } else if (stars === 3 && oldSig === undefined) {
+                // Primeira carga já com 3 estrelas — alerta de elite
+                playAlert(3, direction === 'COMPRA' ? 'buy' : 'sell');
             }
 
             setRadarData(prev => ({
                 ...prev,
                 [fav.value]: {
                     asset: fav,
-                    price: data.price,
-                    rsi14: data.rsi14,
-                    signal: newSig,
-                    signalStrength: data.signalStrength,
-                    trend: data.trend,
+                    price: mainData.price ?? '—',
+                    rsi14: mainData.rsi14 ?? '—',
+                    trend: mainData.trend ?? '—',
+                    m5, m15, h1,
+                    stars,
+                    signal: direction,
+                    signalStrength: m5.signalStrength,
                     loading: false,
                     error: false,
                     flashing: changed,
@@ -107,48 +185,49 @@ export default function SinaisIA() {
                 },
             }));
 
-            // remove flash após 2.5s
             if (changed) {
-                setTimeout(() => {
-                    setRadarData(prev => ({
-                        ...prev,
-                        [fav.value]: { ...prev[fav.value], flashing: false },
-                    }));
-                }, 2500);
+                setTimeout(() => setRadarData(prev => ({ ...prev, [fav.value]: { ...prev[fav.value], flashing: false } })), 2500);
             }
         } catch {
             setRadarData(prev => ({
                 ...prev,
-                [fav.value]: { ...(prev[fav.value] ?? { asset: fav, price: '—', rsi14: '—', signal: '—', signalStrength: '—', trend: '—', flashing: false, lastUpdate: null }), loading: false, error: true },
+                [fav.value]: {
+                    ...(prev[fav.value] ?? {
+                        asset: fav, price: '—', rsi14: '—', trend: '—',
+                        m5: null, m15: null, h1: null, stars: 0,
+                        signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
+                    }),
+                    loading: false, error: true,
+                },
             }));
         }
     };
 
-    // Fetch de todos os favoritos
     const fetchAll = (favs: FavoriteAsset[]) => {
-        // marca todos como loading primeiro
         setRadarData(prev => {
             const updated = { ...prev };
             favs.forEach(f => {
-                updated[f.value] = { ...(updated[f.value] ?? { asset: f, price: '—', rsi14: '—', signal: '—', signalStrength: '—', trend: '—', flashing: false, lastUpdate: null }), loading: true, error: false };
+                updated[f.value] = {
+                    ...(updated[f.value] ?? {
+                        asset: f, price: '—', rsi14: '—', trend: '—',
+                        m5: null, m15: null, h1: null, stars: 0,
+                        signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
+                    }),
+                    loading: true, error: false,
+                };
             });
             return updated;
         });
         favs.forEach(fetchOne);
     };
 
-    // Polling inicial e a cada 60s
     useEffect(() => {
         if (favorites.length === 0) return;
         fetchAll(favorites);
         setCountdown(60);
-
         const tick = setInterval(() => {
             setCountdown(c => {
-                if (c <= 1) {
-                    fetchAll(favorites);
-                    return 60;
-                }
+                if (c <= 1) { fetchAll(favorites); return 60; }
                 return c - 1;
             });
         }, 1000);
@@ -161,32 +240,38 @@ export default function SinaisIA() {
         return positive ? 'rgba(0,230,118,0.04)' : 'transparent';
     };
 
-    // Ordenação: FORTE vai ao topo
+    // Ordenação: 3★ > 2★ > 1★, depois FORTE
     const radarItems = Object.values(radarData).sort((a, b) => {
-        const aStrong = isStrong(a.signal, a.signalStrength) ? 0 : 1;
-        const bStrong = isStrong(b.signal, b.signalStrength) ? 0 : 1;
-        return aStrong - bStrong;
+        if (b.stars !== a.stars) return b.stars - a.stars;
+        const aS = a.signalStrength === 'FORTE' ? 0 : 1;
+        const bS = b.signalStrength === 'FORTE' ? 0 : 1;
+        return aS - bS;
     });
 
     return (
         <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 80px', fontFamily: 'inherit' }}>
 
-            {/* ══════════════════════════════════════════════
-                MEU RADAR (FAVORITOS)
-            ══════════════════════════════════════════════ */}
+            {/* ════════════════════════════════════════
+                MEU RADAR — Score de Confluência
+            ════════════════════════════════════════ */}
             <div style={{ marginBottom: '24px' }}>
-                {/* Header do Radar */}
+                {/* Header */}
                 <div style={{
-                    background: '#0d1117', border: '1px solid rgba(255,204,0,0.15)',
-                    borderBottom: favorites.length === 0 ? '1px solid rgba(255,204,0,0.15)' : 'none',
+                    background: '#0d1117',
+                    border: '1px solid rgba(255,204,0,0.18)',
+                    borderBottom: favorites.length === 0 ? '1px solid rgba(255,204,0,0.18)' : 'none',
                     borderRadius: favorites.length === 0 ? '16px' : '16px 16px 0 0',
                     padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Star style={{ width: '16px', height: '16px', color: '#ffcc00', fill: '#ffcc00' }} />
                         <div>
-                            <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#ffcc00', margin: 0 }}>Meu Radar (Favoritos)</h2>
-                            <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>Atualiza automaticamente a cada 60s</p>
+                            <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#ffcc00', margin: 0 }}>
+                                Meu Radar — Score de Confluência
+                            </h2>
+                            <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>
+                                M5 · M15 · H1 • Atualiza a cada 60s
+                            </p>
                         </div>
                     </div>
                     {favorites.length > 0 && (
@@ -206,9 +291,32 @@ export default function SinaisIA() {
                     )}
                 </div>
 
+                {/* Legenda de estrelas */}
+                {favorites.length > 0 && (
+                    <div style={{
+                        background: '#080b10', borderLeft: '1px solid rgba(255,204,0,0.12)', borderRight: '1px solid rgba(255,204,0,0.12)',
+                        padding: '8px 20px', display: 'flex', gap: '20px', flexWrap: 'wrap',
+                    }}>
+                        {[
+                            { stars: 1, label: '1★ — Sinal só no M5' },
+                            { stars: 2, label: '2★ — M5 + M15 alinhados' },
+                            { stars: 3, label: '3★ — Oportunidade de Elite (M5+M15+H1)' },
+                        ].map(({ stars, label }) => (
+                            <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#475569' }}>
+                                <StarBadge stars={stars} direction="COMPRA" />
+                                <span>{label}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {/* Sem favoritos */}
                 {favorites.length === 0 && (
-                    <div style={{ background: '#0d1117', border: '1px solid rgba(255,204,0,0.08)', borderTop: 'none', borderRadius: '0 0 16px 16px', padding: '28px 20px', textAlign: 'center' }}>
+                    <div style={{
+                        background: '#0d1117', border: '1px solid rgba(255,204,0,0.08)',
+                        borderTop: 'none', borderRadius: '0 0 16px 16px',
+                        padding: '28px 20px', textAlign: 'center',
+                    }}>
                         <Star style={{ width: '28px', height: '28px', color: '#334155', margin: '0 auto 10px' }} />
                         <p style={{ color: '#475569', fontSize: '13px', margin: 0 }}>Nenhum favorito ainda.</p>
                         <p style={{ color: '#334155', fontSize: '12px', margin: '4px 0 0' }}>
@@ -217,83 +325,122 @@ export default function SinaisIA() {
                     </div>
                 )}
 
-                {/* Cards do Radar */}
+                {/* Cards */}
                 {radarItems.length > 0 && (
-                    <div style={{ background: '#0a0d12', border: '1px solid rgba(255,204,0,0.1)', borderTop: 'none', borderRadius: '0 0 16px 16px', overflow: 'hidden' }}>
-                        {/* Injetar keyframes de flash via style tag */}
+                    <div style={{
+                        background: '#0a0d12',
+                        border: '1px solid rgba(255,204,0,0.1)',
+                        borderTop: 'none',
+                        borderRadius: '0 0 16px 16px',
+                        overflow: 'hidden',
+                    }}>
                         <style>{`
                             @keyframes radarFlash {
                                 0%,100% { box-shadow: none; }
-                                25%,75% { box-shadow: 0 0 0 2px #ffcc00, 0 0 18px rgba(255,204,0,0.4); }
+                                25%,75%  { box-shadow: 0 0 0 2px #ffcc00, 0 0 18px rgba(255,204,0,0.4); }
                             }
-                            .radar-flash { animation: radarFlash 0.6s ease 4; }
+                            @keyframes eliteGlow {
+                                0%,100% { box-shadow: 0 0 14px rgba(255,204,0,0.2); }
+                                50%      { box-shadow: 0 0 32px rgba(255,204,0,0.55); }
+                            }
+                            .radar-flash  { animation: radarFlash 0.6s ease 4; }
+                            .elite-card   { animation: eliteGlow 1.8s ease-in-out infinite; }
                         `}</style>
 
                         {radarItems.map((item, i) => {
-                            const strong = isStrong(item.signal, item.signalStrength);
-                            const glowColor = item.signal === 'COMPRA' ? '0 0 20px rgba(0,230,118,0.3)' : item.signal === 'VENDA' ? '0 0 20px rgba(239,68,68,0.3)' : 'none';
+                            const isElite = item.stars === 3 && (item.signal === 'COMPRA' || item.signal === 'VENDA');
+                            const c = sigColor(item.signal);
+                            const eliteBg = item.signal === 'COMPRA'
+                                ? 'linear-gradient(135deg, rgba(0,230,118,0.07), rgba(0,230,118,0.02))'
+                                : item.signal === 'VENDA'
+                                    ? 'linear-gradient(135deg, rgba(239,68,68,0.07), rgba(239,68,68,0.02))'
+                                    : 'transparent';
+
                             return (
                                 <div
                                     key={item.asset.value}
-                                    className={item.flashing ? 'radar-flash' : ''}
+                                    className={[
+                                        item.flashing ? 'radar-flash' : '',
+                                        isElite ? 'elite-card' : '',
+                                    ].join(' ').trim()}
                                     style={{
-                                        display: 'grid', gridTemplateColumns: '1fr auto',
-                                        alignItems: 'center', padding: '14px 20px',
-                                        background: strong ? sigBg(item.signal) : 'transparent',
+                                        padding: '16px 20px',
+                                        background: isElite ? eliteBg : 'transparent',
                                         borderBottom: i < radarItems.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
                                         transition: 'background 0.3s',
-                                        boxShadow: strong ? glowColor : 'none',
                                     }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                                        {/* Ícone de tendência */}
-                                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: `${sigColor(item.signal)}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    {/* Linha 1: ativo + estrelas + badge sinal */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                                        {/* Ícone */}
+                                        <div style={{ width: '34px', height: '34px', borderRadius: '9px', background: `${c}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                             {item.signal === 'VENDA'
-                                                ? <TrendingDown style={{ width: '18px', height: '18px', color: sigColor(item.signal) }} />
-                                                : <TrendingUp style={{ width: '18px', height: '18px', color: sigColor(item.signal) }} />
+                                                ? <TrendingDown style={{ width: '16px', height: '16px', color: c }} />
+                                                : <TrendingUp style={{ width: '16px', height: '16px', color: c }} />
                                             }
                                         </div>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                                                <span style={{ fontWeight: 800, color: '#fff', fontSize: '14px' }}>{item.asset.label}</span>
-                                                {/* Badge do sinal */}
-                                                <span style={{
-                                                    fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px',
-                                                    background: `${sigColor(item.signal)}20`, color: sigColor(item.signal),
-                                                    border: `1px solid ${sigColor(item.signal)}40`,
-                                                }}>
-                                                    {item.loading ? '...' : `${item.signal}${item.signalStrength === 'FORTE' ? ' FORTE' : ''}`}
-                                                </span>
-                                                {strong && (
-                                                    <span style={{ fontSize: '10px', color: '#ffcc00', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                                        <AlertTriangle style={{ width: '11px', height: '11px' }} /> Oportunidade
-                                                    </span>
-                                                )}
-                                                {item.error && (
-                                                    <span style={{ fontSize: '10px', color: '#ef4444' }}>Erro ao carregar</span>
-                                                )}
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '12px' }}>
-                                                <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                                    Preço: <strong style={{ color: '#fff' }}>{item.loading ? '...' : item.price}</strong>
-                                                </span>
-                                                <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                                    RSI: <strong style={{
-                                                        color: item.loading ? '#64748b' : parseFloat(item.rsi14) < 35 ? '#00e676' : parseFloat(item.rsi14) > 65 ? '#ef4444' : '#fff'
-                                                    }}>{item.loading ? '...' : item.rsi14}</strong>
-                                                </span>
-                                                <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                                    Tend: <strong style={{ color: item.trend === 'ALTA' ? '#00e676' : item.trend === 'BAIXA' ? '#ef4444' : '#64748b' }}>{item.loading ? '...' : item.trend}</strong>
-                                                </span>
-                                            </div>
+
+                                        {/* Nome + estrelas */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                            <span style={{ fontWeight: 800, color: '#fff', fontSize: '15px' }}>{item.asset.label}</span>
+                                            {!item.loading && <StarBadge stars={item.stars} direction={item.signal} />}
                                         </div>
+
+                                        {/* Badge sinal */}
+                                        {!item.loading && (
+                                            <span style={{
+                                                fontSize: '10px', fontWeight: 800, padding: '2px 9px', borderRadius: '6px',
+                                                background: `${c}20`, color: c, border: `1px solid ${c}40`,
+                                            }}>
+                                                {item.signal}{item.signalStrength === 'FORTE' ? ' FORTE' : ''}
+                                            </span>
+                                        )}
+
+                                        {/* Banner Elite */}
+                                        {isElite && (
+                                            <span style={{
+                                                fontSize: '10px', fontWeight: 900, color: '#000',
+                                                background: 'linear-gradient(90deg, #ffcc00, #ff9900)',
+                                                padding: '2px 10px', borderRadius: '20px',
+                                                display: 'flex', alignItems: 'center', gap: '4px',
+                                            }}>
+                                                <AlertTriangle style={{ width: '10px', height: '10px' }} /> ELITE 3★
+                                            </span>
+                                        )}
+
+                                        {item.loading && <span style={{ fontSize: '11px', color: '#475569' }}>Carregando...</span>}
+                                        {item.error && <span style={{ fontSize: '11px', color: '#ef4444' }}>Erro ao carregar</span>}
+
+                                        {/* Horário atualização */}
+                                        <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#334155' }}>
+                                            {item.lastUpdate?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'}
+                                        </span>
                                     </div>
-                                    {/* Horário da última atualização */}
-                                    <div style={{ textAlign: 'right', fontSize: '11px', color: '#334155' }}>
-                                        {item.lastUpdate
-                                            ? item.lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                                            : '—'
-                                        }
+
+                                    {/* Linha 2: chips TF + métricas */}
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <TFChip label="M5" data={item.m5} />
+                                        <TFChip label="M15" data={item.m15} />
+                                        <TFChip label="H1" data={item.h1} />
+
+                                        <span style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
+
+                                        <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                            Preço <strong style={{ color: '#fff' }}>{item.loading ? '…' : item.price}</strong>
+                                        </span>
+                                        <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                            RSI <strong style={{
+                                                color: item.loading ? '#64748b'
+                                                    : parseFloat(item.rsi14) < 35 ? '#00e676'
+                                                        : parseFloat(item.rsi14) > 65 ? '#ef4444'
+                                                            : '#fff'
+                                            }}>{item.loading ? '…' : item.rsi14}</strong>
+                                        </span>
+                                        <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                            Tend <strong style={{
+                                                color: item.trend === 'ALTA' ? '#00e676' : item.trend === 'BAIXA' ? '#ef4444' : '#64748b'
+                                            }}>{item.loading ? '…' : item.trend}</strong>
+                                        </span>
                                     </div>
                                 </div>
                             );
@@ -302,7 +449,7 @@ export default function SinaisIA() {
                 )}
             </div>
 
-            {/* ── Header ── */}
+            {/* ── Header Sinais IA ── */}
             <div style={{ background: '#0d1117', border: '1px solid rgba(0,229,255,0.08)', borderBottom: 'none', borderRadius: '16px 16px 0 0', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                     <h2 style={{ fontSize: '15px', fontWeight: 800, color: '#00e5ff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
@@ -311,22 +458,10 @@ export default function SinaisIA() {
                     </h2>
                     <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0' }}>Sinais de trading gerados por IA com alta confiança</p>
                 </div>
-                {/* Toggle Ativo/Inativo */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: active ? '#00e5ff' : '#475569', fontWeight: 700 }}>
-                        {active ? 'Ativo' : 'Inativo'}
-                    </span>
-                    <div
-                        onClick={() => setActive(!active)}
-                        style={{
-                            width: '44px', height: '24px', borderRadius: '12px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                            background: active ? '#00e5ff' : '#1e293b',
-                        }}
-                    >
-                        <div style={{
-                            position: 'absolute', top: '3px', left: active ? '23px' : '3px', width: '18px', height: '18px',
-                            borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
-                        }} />
+                    <span style={{ fontSize: '12px', color: active ? '#00e5ff' : '#475569', fontWeight: 700 }}>{active ? 'Ativo' : 'Inativo'}</span>
+                    <div onClick={() => setActive(!active)} style={{ width: '44px', height: '24px', borderRadius: '12px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', background: active ? '#00e5ff' : '#1e293b' }}>
+                        <div style={{ position: 'absolute', top: '3px', left: active ? '23px' : '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }} />
                     </div>
                 </div>
             </div>
@@ -362,13 +497,8 @@ export default function SinaisIA() {
                         <Lock style={{ width: '12px', height: '12px' }} /> Bloqueado
                     </span>
                 </div>
-
                 {[0].map(i => (
-                    <div key={i} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px',
-                        background: 'rgba(0,230,118,0.04)', padding: '22px 24px', borderBottom: '1px solid rgba(255,255,255,0.03)',
-                        backdropFilter: 'blur(2px)', position: 'relative',
-                    }}>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px', background: 'rgba(0,230,118,0.04)', padding: '22px 24px', borderBottom: '1px solid rgba(255,255,255,0.03)', backdropFilter: 'blur(2px)', position: 'relative' }}>
                         <div style={{ position: 'absolute', inset: 0, background: 'rgba(13,17,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid #00e676', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
                                 <Crown style={{ width: '14px', height: '14px', color: '#00e676' }} />
@@ -388,38 +518,23 @@ export default function SinaisIA() {
                         <Zap style={{ width: '14px', height: '14px', color: '#ff9900' }} /> Sinais Recentes
                     </span>
                 </div>
-
                 {RECENT_SIGNALS.map((sig, i) => (
-                    <div key={sig.id} style={{
-                        display: 'grid', gridTemplateColumns: '1fr auto',
-                        alignItems: 'center', padding: '12px 24px',
-                        background: rowBg(sig.positive, sig.badge),
-                        borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none',
-                        cursor: 'pointer', transition: 'background 0.15s',
-                    }}
+                    <div key={sig.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '12px 24px', background: rowBg(sig.positive, sig.badge), borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
                         onMouseLeave={e => (e.currentTarget.style.background = rowBg(sig.positive, sig.badge))}
                     >
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                {sig.direction === 'buy'
-                                    ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} />
-                                    : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />
-                                }
+                                {sig.direction === 'buy' ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} /> : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />}
                                 <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
-                                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>
-                                    {sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}
-                                </span>
+                                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span style={{ fontSize: '12px', color: '#64748b' }}>$</span>
-                                <span style={{ fontSize: '13px', fontWeight: 700, color: sig.positive ? '#00e676' : '#ff3d00' }}>
-                                    {sig.result}
-                                </span>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: sig.positive ? '#00e676' : '#ff3d00' }}>{sig.result}</span>
                                 <span style={{ fontSize: '11px', color: '#475569' }}>({sig.pct})</span>
                             </div>
                         </div>
-
                         <div style={{ textAlign: 'right' }}>
                             <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 4px' }}>{sig.time}</p>
                             <p style={{ fontSize: '11px', color: '#475569', margin: 0, fontFamily: 'monospace' }}>{sig.stats}</p>
