@@ -123,8 +123,11 @@ export default function SinaisIA() {
 
     useEffect(() => { setFavorites(getFavorites()); }, []);
 
-    // Busca único TF de um ativo
-    const fetchTF = async (fav: FavoriteAsset, timeframe: string): Promise<TFData> => {
+    // Helper de delay
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Busca único TF de um ativo (retorna objeto completo)
+    const fetchTF = async (fav: FavoriteAsset, timeframe: string) => {
         const symbol = fav.value.replace('/', '');
         const res = await fetch('/api/analyze', {
             method: 'POST',
@@ -132,28 +135,25 @@ export default function SinaisIA() {
             body: JSON.stringify({ symbol, timeframe, assetType: fav.assetType }),
         });
         const data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error ?? 'err');
-        return { signal: data.signal, signalStrength: data.signalStrength };
+        if (!res.ok || data.error) throw new Error(`[${fav.value} ${timeframe}] HTTP ${res.status}: ${data.error ?? JSON.stringify(data)}`);
+        return data;
     };
 
-    // Busca os 3 TFs em paralelo para 1 ativo e atualiza o estado
+    // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
     const fetchOne = async (fav: FavoriteAsset) => {
         try {
-            const [m5, m15, h1, mainData] = await Promise.all([
-                fetchTF(fav, '5m'),
-                fetchTF(fav, '15m'),
-                fetchTF(fav, '1h'),
-                // busca m5 detalhado (preço, rsi, trend)
-                (async () => {
-                    const symbol = fav.value.replace('/', '');
-                    const res = await fetch('/api/analyze', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ symbol, timeframe: '5m', assetType: fav.assetType }),
-                    });
-                    return res.json();
-                })(),
-            ]);
+            // M5 primeiro — reaproveita os dados de preço, rsi, trend
+            const m5Data = await fetchTF(fav, '5m');
+            await delay(1000);
+
+            const m15Data = await fetchTF(fav, '15m');
+            await delay(1000);
+
+            const h1Data = await fetchTF(fav, '1h');
+
+            const m5: TFData = { signal: m5Data.signal, signalStrength: m5Data.signalStrength };
+            const m15: TFData = { signal: m15Data.signal, signalStrength: m15Data.signalStrength };
+            const h1: TFData = { signal: h1Data.signal, signalStrength: h1Data.signalStrength };
 
             const { stars, direction } = calcStars(m5, m15, h1);
             const oldSig = prevSignals.current[fav.value];
@@ -171,9 +171,10 @@ export default function SinaisIA() {
                 ...prev,
                 [fav.value]: {
                     asset: fav,
-                    price: mainData.price ?? '—',
-                    rsi14: mainData.rsi14 ?? '—',
-                    trend: mainData.trend ?? '—',
+                    // Reutiliza dados do M5 para preço/rsi/trend (evita chamada extra)
+                    price: m5Data.price ?? '—',
+                    rsi14: m5Data.rsi14 ?? '—',
+                    trend: m5Data.trend ?? '—',
                     m5, m15, h1,
                     stars,
                     signal: direction,
@@ -188,22 +189,29 @@ export default function SinaisIA() {
             if (changed) {
                 setTimeout(() => setRadarData(prev => ({ ...prev, [fav.value]: { ...prev[fav.value], flashing: false } })), 2500);
             }
-        } catch {
+        } catch (err) {
+            // LOG DETALHADO do erro para diagnóstico
+            console.error(`[Radar] Falha ao buscar dados de ${fav.value}:`, err instanceof Error ? err.message : err);
+
             setRadarData(prev => ({
                 ...prev,
                 [fav.value]: {
+                    // Preserva o ÚLTIMO preço/dados conhecidos em vez de apagar
                     ...(prev[fav.value] ?? {
                         asset: fav, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
                     }),
-                    loading: false, error: true,
+                    loading: false,
+                    error: true,
+                    // Mantém lastUpdate do sucesso anterior para referência
                 },
             }));
         }
     };
 
-    const fetchAll = (favs: FavoriteAsset[]) => {
+    const fetchAll = async (favs: FavoriteAsset[]) => {
+        // Marca todos como carregando antes de iniciar
         setRadarData(prev => {
             const updated = { ...prev };
             favs.forEach(f => {
@@ -218,18 +226,28 @@ export default function SinaisIA() {
             });
             return updated;
         });
-        favs.forEach(fetchOne);
+        // Processa ativos SEQUENCIALMENTE com 2s de intervalo entre eles
+        // para não sobrecarregar a API com muitas requisições simultâneas
+        for (let i = 0; i < favs.length; i++) {
+            await fetchOne(favs[i]);
+            if (i < favs.length - 1) await delay(2000);
+        }
     };
 
     useEffect(() => {
         if (favorites.length === 0) return;
         fetchAll(favorites);
         setCountdown(60);
+
+        let counter = 60;
         const tick = setInterval(() => {
-            setCountdown(c => {
-                if (c <= 1) { fetchAll(favorites); return 60; }
-                return c - 1;
-            });
+            counter -= 1;
+            setCountdown(counter);
+            if (counter <= 0) {
+                counter = 60;
+                setCountdown(60);
+                fetchAll(favorites);
+            }
         }, 1000);
         return () => clearInterval(tick);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -409,7 +427,15 @@ export default function SinaisIA() {
                                         )}
 
                                         {item.loading && <span style={{ fontSize: '11px', color: '#475569' }}>Carregando...</span>}
-                                        {item.error && <span style={{ fontSize: '11px', color: '#ef4444' }}>Erro ao carregar</span>}
+                                        {item.error && (
+                                            <span title="Falha na última atualização — dados anteriores mantidos" style={{
+                                                fontSize: '10px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '3px',
+                                                background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+                                                padding: '1px 7px', borderRadius: '5px',
+                                            }}>
+                                                ⚠️ falha na atualização
+                                            </span>
+                                        )}
 
                                         {/* Horário atualização */}
                                         <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#334155' }}>
