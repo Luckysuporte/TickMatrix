@@ -176,7 +176,7 @@ export default function NovaAnalise() {
         }
     };
 
-    const tfLabel: Record<string, string> = { '1m': '1 Minuto', '5m': '5 Minutos', '15m': '15 Minutos', '1h': '1 Hora', '4h': '4 Horas', '1d': 'Diário', '1w': 'Semanal' };
+    const tfLabel: Record<string, string> = { '1m': '1 Minuto', '5m': '5 Minutos', '10m': '10 Minutos', '15m': '15 Minutos', '1h': '1 Hora', '4h': '4 Horas', '1d': 'Diário', '1w': 'Semanal' };
     const assetLabel = selectedAsset?.label ?? 'XAU';
     const assetDesc = selectedAsset?.description ?? 'Ouro / Dólar';
 
@@ -649,6 +649,7 @@ export default function NovaAnalise() {
                             <select value={timeframe} onChange={e => setTimeframe(e.target.value)} style={selectStyle}>
                                 <option value="1m">1 Minuto</option>
                                 <option value="5m">5 Minutos</option>
+                                <option value="10m">10 Minutos</option>
                                 <option value="15m">15 Minutos</option>
                                 <option value="1h">1 Hora</option>
                                 <option value="4h">4 Horas</option>

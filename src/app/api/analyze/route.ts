@@ -9,11 +9,11 @@ const SMA = ti.SMA;
 // Binance → "1m","5m","15m","1h","4h","1d","1w"
 // Twelve Data → "1min","5min","15min","1h","4h","1day","1week"
 const TF_TO_BINANCE: Record<string, string> = {
-    '1m': '1m', '5m': '5m', '15m': '15m',
+    '1m': '1m', '5m': '5m', '10m': '10m', '15m': '15m',
     '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w',
 };
 const TF_TO_TWELVEDATA: Record<string, string> = {
-    '1m': '1min', '5m': '5min', '15m': '15min',
+    '1m': '1min', '5m': '5min', '10m': '10min', '15m': '15min',
     '1h': '1h', '4h': '4h', '1d': '1day', '1w': '1week',
 };
 
