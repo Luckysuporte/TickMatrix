@@ -118,7 +118,7 @@ export default function SinaisIA() {
     const [active, setActive] = useState(false);
     const [radarData, setRadarData] = useState<Record<string, RadarItem>>({});
     const [favorites, setFavorites] = useState<FavoriteAsset[]>([]);
-    const [countdown, setCountdown] = useState(60);
+    const [countdown, setCountdown] = useState(120);
     const prevSignals = useRef<Record<string, string>>({});
 
     useEffect(() => { setFavorites(getFavorites()); }, []);
@@ -144,10 +144,10 @@ export default function SinaisIA() {
         try {
             // M5 primeiro — reaproveita os dados de preço, rsi, trend
             const m5Data = await fetchTF(fav, '5m');
-            await delay(1000);
+            await delay(2000);
 
             const m15Data = await fetchTF(fav, '15m');
-            await delay(1000);
+            await delay(2000);
 
             const h1Data = await fetchTF(fav, '1h');
 
@@ -190,21 +190,21 @@ export default function SinaisIA() {
                 setTimeout(() => setRadarData(prev => ({ ...prev, [fav.value]: { ...prev[fav.value], flashing: false } })), 2500);
             }
         } catch (err) {
-            // LOG DETALHADO do erro para diagnóstico
-            console.error(`[Radar] Falha ao buscar dados de ${fav.value}:`, err instanceof Error ? err.message : err);
+            // Log silencioso no console para diagnóstico (sem exibir erro na UI)
+            console.error(`[Radar] Falha ao buscar ${fav.value}:`, err instanceof Error ? err.message : err);
 
+            // Preserva os ÚLTIMOS dados conhecidos e não exibe erro na tela.
+            // A próxima tentativa automática ocorrerá em 120s.
             setRadarData(prev => ({
                 ...prev,
                 [fav.value]: {
-                    // Preserva o ÚLTIMO preço/dados conhecidos em vez de apagar
                     ...(prev[fav.value] ?? {
                         asset: fav, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
                     }),
                     loading: false,
-                    error: true,
-                    // Mantém lastUpdate do sucesso anterior para referência
+                    error: false, // silencioso — dados anteriores ficam na tela
                 },
             }));
         }
@@ -237,15 +237,15 @@ export default function SinaisIA() {
     useEffect(() => {
         if (favorites.length === 0) return;
         fetchAll(favorites);
-        setCountdown(60);
+        setCountdown(120);
 
-        let counter = 60;
+        let counter = 120;
         const tick = setInterval(() => {
             counter -= 1;
             setCountdown(counter);
             if (counter <= 0) {
-                counter = 60;
-                setCountdown(60);
+                counter = 120;
+                setCountdown(120);
                 fetchAll(favorites);
             }
         }, 1000);
@@ -441,6 +441,38 @@ export default function SinaisIA() {
                                         <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#334155' }}>
                                             {item.lastUpdate?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'}
                                         </span>
+
+                                        {/* Botão de Recarregar individual — aparece só quando há erro */}
+                                        {item.error && !item.loading && (
+                                            <button
+                                                onClick={() => fetchOne(item.asset)}
+                                                title="Tentar recarregar este ativo"
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '6px',
+                                                    padding: '3px 8px',
+                                                    cursor: 'pointer',
+                                                    color: '#94a3b8',
+                                                    fontSize: '10px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    marginLeft: '4px',
+                                                    transition: 'all 0.15s',
+                                                }}
+                                                onMouseEnter={e => {
+                                                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.1)';
+                                                    (e.currentTarget as HTMLButtonElement).style.color = '#fff';
+                                                }}
+                                                onMouseLeave={e => {
+                                                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)';
+                                                    (e.currentTarget as HTMLButtonElement).style.color = '#94a3b8';
+                                                }}
+                                            >
+                                                🔄 Recarregar
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Linha 2: chips TF + métricas */}
