@@ -934,16 +934,37 @@ export default function SinaisIA() {
                                 onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
                             />
 
-                            {/* Dropdown de Autocomplete */}
-                            {(newAssetInput.trim().length > 0 && (isSearching || searchResults.length > 0 || searchError)) && (
+                            {/* Dropdown de Autocomplete (Híbrido) */}
+                            {(newAssetInput.trim().length > 0) && (
                                 <div style={{
                                     position: 'absolute', top: 'calc(100% + 4px)', left: '22px', right: '22px',
                                     background: '#121822', border: '1px solid rgba(0,229,255,0.2)',
                                     borderRadius: '10px', zIndex: 10, maxHeight: '200px', overflowY: 'auto',
                                     boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
                                 }}>
+                                    {/* Opção fixa de Adição Manual (Forçada) */}
+                                    <div
+                                        onClick={() => addAssetFromSearch({ symbol: newAssetInput.trim(), instrument_name: 'Ativo Forçado', exchange: 'Custom' })}
+                                        style={{
+                                            padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                            cursor: 'pointer', transition: 'background 0.15s',
+                                            background: 'rgba(0,229,255,0.05)',
+                                        }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,0.15)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,229,255,0.05)')}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ width: '20px', height: '20px', borderRadius: '5px', background: '#00e5ff', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900 }}>+</div>
+                                            <div>
+                                                <span style={{ fontSize: '13px', color: '#fff' }}>Adicionar <strong style={{ color: '#00e5ff', fontFamily: 'monospace' }}>"{newAssetInput.trim()}"</strong></span>
+                                                <div style={{ fontSize: '10px', color: '#00e5ff', opacity: 0.8 }}>Forçar ativo personalizado (B3, etc)</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Resultados da API */}
                                     {isSearching ? (
-                                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>Buscando...</div>
+                                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>Buscando na Twelve Data...</div>
                                     ) : searchError ? (
                                         <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#ef4444' }}>{searchError}</div>
                                     ) : (
