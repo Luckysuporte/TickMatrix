@@ -7,7 +7,7 @@ import { getFavorites, FavoriteAsset } from '@/lib/favorites';
 // ─── Sinais Recentes — começa vazio, pronto para receber dados reais ─────────
 const RECENT_SIGNALS: {
     id: number; asset: string; direction: string; badge: string;
-    badgeColor: string; result: string; pct: string; time: string;
+    badgeColor: string; stopLoss: string; takeProfit: string; time: string;
     stats: string; positive: boolean;
 }[] = [];
 
@@ -872,10 +872,9 @@ export default function SinaisIA() {
                                     <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
                                     <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{ fontSize: '12px', color: '#64748b' }}>$</span>
-                                    <span style={{ fontSize: '13px', fontWeight: 700, color: sig.positive ? '#00e676' : '#ff3d00' }}>{sig.result}</span>
-                                    <span style={{ fontSize: '11px', color: '#475569' }}>({sig.pct})</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.2)' }}>SL: {sig.stopLoss}</span>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(74,222,128,0.2)' }}>TP: {sig.takeProfit}</span>
                                 </div>
                             </div>
                             <div style={{ textAlign: 'right' }}>

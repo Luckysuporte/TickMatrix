@@ -3,6 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 const ti = require('technicalindicators');
 const RSI = ti.RSI;
 const SMA = ti.SMA;
+const ATR = ti.ATR;
+
+interface Candle {
+    high: number;
+    low: number;
+    close: number;
+}
 
 
 // ─── Timeframe mapping ────────────────────────────────────────────────────────
@@ -25,17 +32,20 @@ function toBinanceSymbol(sym: string): string {
 }
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
-async function fetchBinanceClosePrices(symbol: string, interval: string): Promise<number[]> {
+async function fetchBinanceCandles(symbol: string, interval: string): Promise<Candle[]> {
     const binSym = toBinanceSymbol(symbol);
     const url = `https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=${interval}&limit=100`;
     const res = await fetch(url, { next: { revalidate: 0 } });
     if (!res.ok) throw new Error(`Binance error ${res.status}: ${await res.text()}`);
     const data: unknown[][] = await res.json();
-    // kline[4] = close price
-    return data.map((k) => parseFloat(k[4] as string));
+    return data.map((k) => ({
+        high: parseFloat(k[2] as string),
+        low: parseFloat(k[3] as string),
+        close: parseFloat(k[4] as string)
+    }));
 }
 
-async function fetchTwelveDataClosePrices(symbol: string, interval: string): Promise<number[]> {
+async function fetchTwelveDataCandles(symbol: string, interval: string): Promise<Candle[]> {
     const apiKey = process.env.TWELVE_DATA_API_KEY;
     if (!apiKey) throw new Error('TWELVE_DATA_API_KEY not configured');
     const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${interval}&outputsize=100&apikey=${apiKey}`;
@@ -44,8 +54,12 @@ async function fetchTwelveDataClosePrices(symbol: string, interval: string): Pro
     const json = await res.json();
     if (json.status === 'error') throw new Error(`Twelve Data API: ${json.message}`);
     // values are in reverse-chronological order → reverse to get oldest first
-    const values: { close: string }[] = json.values ?? [];
-    return values.reverse().map((v) => parseFloat(v.close));
+    const values: { high: string; low: string; close: string }[] = json.values ?? [];
+    return values.reverse().map((v) => ({
+        high: parseFloat(v.high),
+        low: parseFloat(v.low),
+        close: parseFloat(v.close)
+    }));
 }
 
 // ─── Smart decimal formatting by symbol ─────────────────────────────────────
@@ -80,7 +94,7 @@ function fmtPrice(n: number, symbol: string): string {
 const RISK_PERCENT = 0.005;   // 0.5%
 const REWARD_RATIO = 2;       // Primary target is 1:2
 
-function computeSignal(closes: number[], symbol: string): {
+function computeSignal(candles: Candle[], symbol: string): {
     signal: 'COMPRA' | 'VENDA' | 'NEUTRO';
     signalStrength: 'FORTE' | 'FRACA' | 'NEUTRO';
     price: number;
@@ -98,6 +112,10 @@ function computeSignal(closes: number[], symbol: string): {
     high: number;
     low: number;
 } {
+    const closes = candles.map(c => c.close);
+    const highs = candles.map(c => c.high);
+    const lows = candles.map(c => c.low);
+
     const price = closes[closes.length - 1];
     const high = Math.max(...closes.slice(-20));
     const low = Math.min(...closes.slice(-20));
@@ -111,7 +129,12 @@ function computeSignal(closes: number[], symbol: string): {
     const rsiValues = RSI.calculate({ period: 14, values: closes });
     const rsi14 = rsiValues[rsiValues.length - 1] ?? 50;
 
+    // ATR 14
+    const atrValues = ATR.calculate({ period: 14, high: highs, low: lows, close: closes });
+    const atr14 = atrValues[atrValues.length - 1] ?? (price * RISK_PERCENT); // fallback caso erro
+
     const trend: 'ALTA' | 'BAIXA' | 'LATERAL' =
+
         price > sma20 * 1.002 ? 'ALTA' : price < sma20 * 0.998 ? 'BAIXA' : 'LATERAL';
 
     let signal: 'COMPRA' | 'VENDA' | 'NEUTRO';
@@ -119,26 +142,26 @@ function computeSignal(closes: number[], symbol: string): {
     let entry: number, stopLoss: number, takeProfit1: number, takeProfit2: number, takeProfit3: number;
     let riskRewardString: string;
 
-    const riskAmount = price * RISK_PERCENT;
+    const riskAmount = atr14 * 1.5;
 
     if (price > sma20 && rsi14 < 35) {
         signal = 'COMPRA';
         signalStrength = rsi14 < 25 ? 'FORTE' : 'FRACA';
         entry = price;
-        stopLoss = price - riskAmount;           // -0.5%
-        takeProfit1 = price + riskAmount * 1;      // R:R 1:1
+        stopLoss = price - riskAmount;           // SL a 1.5x ATR
+        takeProfit1 = price + riskAmount * 1;    // R:R 1:1
         takeProfit2 = price + riskAmount * REWARD_RATIO; // R:R 1:2 (principal)
-        takeProfit3 = price + riskAmount * 3;      // R:R 1:3
+        takeProfit3 = price + riskAmount * 3;    // R:R 1:3
         riskRewardString = `1:${REWARD_RATIO}`;
 
     } else if (price < sma20 && rsi14 > 65) {
         signal = 'VENDA';
         signalStrength = rsi14 > 75 ? 'FORTE' : 'FRACA';
         entry = price;
-        stopLoss = price + riskAmount;           // +0.5%
-        takeProfit1 = price - riskAmount * 1;      // R:R 1:1
+        stopLoss = price + riskAmount;           // SL a 1.5x ATR
+        takeProfit1 = price - riskAmount * 1;    // R:R 1:1
         takeProfit2 = price - riskAmount * REWARD_RATIO; // R:R 1:2 (principal)
-        takeProfit3 = price - riskAmount * 3;      // R:R 1:3
+        takeProfit3 = price - riskAmount * 3;    // R:R 1:3
         riskRewardString = `1:${REWARD_RATIO}`;
 
     } else {
@@ -184,21 +207,21 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Parâmetros incompletos. Selecione timeframe e tipo de ativo.' }, { status: 400 });
         }
 
-        let closes: number[];
+        let candles: Candle[];
 
         if (assetType === 'crypto') {
             const binanceInterval = TF_TO_BINANCE[timeframe] ?? '5m';
-            closes = await fetchBinanceClosePrices(symbol, binanceInterval);
+            candles = await fetchBinanceCandles(symbol, binanceInterval);
         } else {
             const tdInterval = TF_TO_TWELVEDATA[timeframe] ?? '5min';
-            closes = await fetchTwelveDataClosePrices(symbol, tdInterval);
+            candles = await fetchTwelveDataCandles(symbol, tdInterval);
         }
 
-        if (!closes || closes.length < 25) {
+        if (!candles || candles.length < 25) {
             return NextResponse.json({ error: 'Insufficient data from provider' }, { status: 422 });
         }
 
-        const result = computeSignal(closes, symbol);
+        const result = computeSignal(candles, symbol);
         const f = (n: number) => fmtPrice(n, symbol);
 
         return NextResponse.json({
