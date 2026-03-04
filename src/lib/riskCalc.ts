@@ -1,71 +1,75 @@
+// ─── Tipos de retorno ──────────────────────────────────────────────────────
+export type LotCalcResult =
+    | { valid: false; message: string }
+    | { valid: true; lotSize: number; lotLabel: string; unitLabel: 'contratos' | 'lotes'; riskAmountUsd: number; displayLine: string };
+
+// ─── Tabela de Tick Values ────────────────────────────────────────────────
+// Valor em USD de 1.0 de movimento absoluto no preço, POR 1 contrato/lote.
+// Ex: MNQ — se o preço muda de 15000 para 15001, o P/L é $2.00 por contrato.
+function getTickConfig(sym: string): { tickValueUsd: number; isFuture: boolean } {
+    const s = sym.toUpperCase().replace('/', '');
+
+    // ── Futuros CME (contratos inteiros) ───────────────────────────────────
+    if (s.includes('MNQ')) return { tickValueUsd: 2.00, isFuture: true };  // Micro E-mini Nasdaq
+    if (s.includes('MYM')) return { tickValueUsd: 0.50, isFuture: true };  // Micro E-mini Dow Jones
+    if (s.includes('MGC')) return { tickValueUsd: 1.00, isFuture: true };  // Micro Gold
+    if (s.includes('MES')) return { tickValueUsd: 5.00, isFuture: true };  // Micro E-mini S&P
+
+    // ── Futuros B3 (contratos inteiros, convertidos de BRL → USD) ─────────
+    // Taxa de câmbio de referência interna: 1 USD = 5.50 BRL
+    const BRL_USD = 5.50;
+    if (s.startsWith('WIN')) return { tickValueUsd: 0.20 / BRL_USD, isFuture: true };  // Mini Índice: R$0.20/pt
+    if (s.startsWith('WDO')) return { tickValueUsd: 10.00 / BRL_USD, isFuture: true }; // Mini Dólar: R$10/pt
+
+    // ── Metais e Commodities Forex (lotes fracionados) ────────────────────
+    // Padrão de 1 oz para metais preciosos em CFD/Spot:
+    // XAU/USD: MGC-equivalente, 1pt = $1.00
+    if (s.includes('XAU')) return { tickValueUsd: 1.00, isFuture: false };
+    if (s.includes('XAG')) return { tickValueUsd: 0.50, isFuture: false };  // Prata Spot (aprox)
+
+    // ── Forex Geral ────────────────────────────────────────────────────────
+    // 1 pip = 0.0001 (ou 0.01 para JPY). Lote padrão = 100,000 unidades.
+    // Para simplificar: tratamos "1.0 de movimento" = 10000 pips = $10,000 em 1 lote
+    // → movimento de 0.0100 (100 pips) = $100 por lote padrão → tickValueUsd = 10000
+    if (s.includes('JPY')) return { tickValueUsd: 100.00, isFuture: false }; // Pares JPY (1.0 = 100 pips em USD)
+    return { tickValueUsd: 10000.00, isFuture: false }; // Forex padrão (EUR/USD etc)
+}
+
+// ─── Função principal ─────────────────────────────────────────────────────
 export function calculateSuggestedLot(
     accountBalance: number,
     riskPercentage: number,
     entryPrice: number,
     stopLossPrice: number,
     assetSymbol: string
-): { lotSize: number; riskAmountUsd: number; lotLabel: string } {
-    if (!accountBalance || accountBalance <= 0 || !entryPrice || !stopLossPrice || entryPrice === stopLossPrice) {
-        return { lotSize: 0, riskAmountUsd: 0, lotLabel: '0.00' };
+): LotCalcResult {
+    const distance = Math.abs(entryPrice - stopLossPrice);
+
+    // Guarda de segurança: SL inválido ou ausente
+    if (!accountBalance || accountBalance <= 0 || !distance || distance < 0.0001) {
+        return { valid: false, message: 'Aguardando Volatilidade' };
     }
 
     const riskAmountUsd = accountBalance * (riskPercentage / 100);
-    const distance = Math.abs(entryPrice - stopLossPrice);
+    const { tickValueUsd, isFuture } = getTickConfig(assetSymbol);
 
-    let tickValueUsd = 1; // Padrão
-    let isForex = false;
-    const sym = assetSymbol.toUpperCase();
-
-    // Tabela de Valor de Tick (por 1.0 de movimento absoluto no preço)
-    if (sym.includes('MNQ') || sym === 'MYM') {
-        // MNQ: 1 ponto = $2.00
-        tickValueUsd = 2.00;
-    } else if (sym.includes('MGC')) {
-        // MGC: 1 ponto = $1.00
-        tickValueUsd = 1.00;
-    } else if (sym.includes('WIN')) {
-        // WIN (Mini Índice Brasil): 1 ponto = R$ 0,20 (Aprox $0.0363 no câmbio de 5.50)
-        tickValueUsd = 0.20 / 5.50;
-    } else if (sym.includes('WDO')) {
-        // WDO (Mini Dólar Brasil): 1 ponto = R$ 10,00 (Aprox $1.81 no câmbio de 5.50)
-        tickValueUsd = 10.00 / 5.50;
-    } else {
-        // Forex e Metais (XAU/USD etc)
-        isForex = true;
-
-        // Padrão de Contratos de Forex/Metals:
-        if (sym.includes('XAU')) {
-            // XAU/USD: Contrato padrão = 100 onças. Então movimento de $1.00 = $100 de P/L por Lote cheio (1.00).
-            tickValueUsd = 100.00;
-        } else if (sym.includes('XAG')) {
-            tickValueUsd = 5000.00;
-        } else if (sym.includes('JPY')) {
-            // Em pares JPY, 1.0 absoluto no preço é 100 pips (ex: 150.00 -> 151.00).
-            // Geralmente 100 pips de 1 lote (100,000 unidades) = $~660 (depende do USD/JPY). 
-            // Para simplificar grosseiramente em USD, usamos 1000 como baseline aproximado.
-            tickValueUsd = 1000.00;
-        } else {
-            // Forex Geral (ex: EUR/USD). Movimento de 1.00 absoluto (ex: 1.0000 -> 2.0000) = $ 100,000 por lote padrão.
-            tickValueUsd = 100000.00;
-        }
-    }
-
-    // Fórmula: Lote = (Saldo da Conta * % Risco) / (Distância do Stop Loss * Valor do Tick)
-    // O Valor do Tick aqui já é referenciado para 1.0 de movimento absoluto do preço.
+    // Fórmula: Lote = Risco_$ / (Distância * Valor_por_Ponto)
     let lotSize = riskAmountUsd / (distance * tickValueUsd);
 
-    // Formatação
-    if (lotSize < 0.01) lotSize = 0.01;
+    let lotLabel: string;
+    const unitLabel: 'contratos' | 'lotes' = isFuture ? 'contratos' : 'lotes';
 
-    // Índices baseados em Bolsa (B3, CME) operam número de contratos (inteiros) a não ser CFD fracionado.
-    // Forex opera em casas decimais (0.01).
-    if (!isForex && !sym.includes('XAU')) {
+    if (isFuture) {
+        // Futuros: número inteiro de contratos (mínimo 1)
         lotSize = Math.max(1, Math.round(lotSize));
+        lotLabel = `${lotSize} ${unitLabel}`;
+    } else {
+        // Forex/Metais: arredonda para 2 casas, mínimo 0.01
+        lotSize = Math.max(0.01, parseFloat(lotSize.toFixed(2)));
+        lotLabel = `${lotSize.toFixed(2)} ${unitLabel}`;
     }
 
-    return {
-        lotSize,
-        riskAmountUsd,
-        lotLabel: (isForex || sym.includes('XAU')) ? lotSize.toFixed(2) : lotSize.toFixed(0)
-    };
+    const displayLine = `Lote Recomendado: ${lotLabel} | Risco Total: $${riskAmountUsd.toFixed(2)}`;
+
+    return { valid: true, lotSize, lotLabel, unitLabel, riskAmountUsd, displayLine };
 }

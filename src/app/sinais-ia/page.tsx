@@ -313,10 +313,10 @@ export default function SinaisIA() {
             prevSignals.current[fav.value] = direction;
 
             if (changed) {
-                playAlert(stars, direction === 'COMPRA' ? 'buy' : 'sell');
+                if (active) playAlert(stars, direction === 'COMPRA' ? 'buy' : 'sell');
             } else if (stars === 3 && oldSig === undefined) {
-                // Primeira carga já com 3 estrelas — alerta de elite
-                playAlert(3, direction === 'COMPRA' ? 'buy' : 'sell');
+                // Primeira carga já com 3 estrelas — ping de elite (só se o radar estiver ativo)
+                if (active) playAlert(3, direction === 'COMPRA' ? 'buy' : 'sell');
             }
 
             setRadarData(prev => ({
@@ -1029,9 +1029,17 @@ export default function SinaisIA() {
                                 </div>
                                 {(() => {
                                     const calc = calculateSuggestedLot(accountBalance, riskPercentage, sig.entryPrice, sig.stopLossPrice, sig.asset);
+                                    if (!calc.valid) {
+                                        return (
+                                            <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{ color: '#f59e0b' }}>&#9203;</span>
+                                                {calc.message}
+                                            </div>
+                                        );
+                                    }
                                     return (
                                         <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '6px' }}>
-                                            Lote Recomendado: <span style={{ color: '#00e5ff' }}>{calc.lotLabel}</span> | Risco Total: <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
+                                            Lote Recomendado: <span style={{ color: '#00e5ff', fontWeight: 800 }}>{calc.lotLabel}</span> | Risco Total: <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
                                         </div>
                                     );
                                 })()}
