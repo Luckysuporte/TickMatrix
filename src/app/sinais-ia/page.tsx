@@ -1,17 +1,26 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle, Settings, X, Check } from 'lucide-react';
+import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle, Settings, X, Check, ShieldCheck } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
+import { calculateSuggestedLot } from '@/lib/riskCalc';
 
-// ─── Sinais Recentes — começa vazio, pronto para receber dados reais ─────────
+// ─── Sinais Recentes — mock demonstrativo XAU/USD ─────────
 const RECENT_SIGNALS: {
     id: number; asset: string; direction: string; badge: string;
     badgeColor: string; stopLoss: string; takeProfit: string; time: string;
     stats: string; positive: boolean;
-    // mock para mock calculation:
-    suggestedLot: string;
-}[] = [];
+    entryPrice: number;
+    stopLossPrice: number;
+}[] = [
+        {
+            id: 1, asset: 'XAU/USD', direction: 'buy', badge: 'Ativo',
+            badgeColor: '#00e5ff', stopLoss: '2325.50', takeProfit: '2345.50', time: 'Agora mesmo',
+            stats: 'R:R 1:2', positive: true,
+            entryPrice: 2335.50,
+            stopLossPrice: 2325.50
+        }
+    ];
 
 // ─── Ativos disponíveis no Filtro Sniper ────────────────────────────────────
 const SNIPER_ASSET_GROUPS = [
@@ -963,9 +972,14 @@ export default function SinaisIA() {
                                     <ShieldCheck style={{ width: '14px', height: '14px', color: '#00e5ff' }} />
                                     <span style={{ fontSize: '11px', color: '#94a3b8' }}>Dimensionamento da Posição</span>
                                 </div>
-                                <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '6px' }}>
-                                    Risco Alvo: <span style={{ color: '#f87171' }}>${((accountBalance * riskPercentage) / 100).toFixed(2)}</span> | <span style={{ color: '#00e5ff' }}>Calculando...</span>
-                                </div>
+                                {(() => {
+                                    const calc = calculateSuggestedLot(accountBalance, riskPercentage, sig.entryPrice, sig.stopLossPrice, sig.asset);
+                                    return (
+                                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '6px' }}>
+                                            Lote Recomendado: <span style={{ color: '#00e5ff' }}>{calc.lotLabel}</span> | Risco Total: <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     ))
