@@ -151,6 +151,14 @@ export default function SinaisIA() {
     const [countdown, setCountdown] = useState(120);
     const prevSignals = useRef<Record<string, string>>({});
 
+    // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
+    const [activeFilters, setActiveFilters] = useState({
+        supertrend: true,
+        rsi: false,
+        macd: false,
+        emas: false,
+    });
+
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [filterOpen, setFilterOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<string>('Índices/Futuros');
@@ -658,6 +666,91 @@ export default function SinaisIA() {
                     <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>OFF</div>
                     <div style={{ width: '36px', height: '20px', borderRadius: '10px', background: '#1e293b', position: 'relative', cursor: 'pointer' }}>
                         <div style={{ position: 'absolute', top: '3px', left: '3px', width: '14px', height: '14px', borderRadius: '50%', background: '#475569' }} />
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Construtor de Estratégias (Filtros de Confluência) ── */}
+            <div style={{
+                background: '#0a0f16', border: '1px solid rgba(0,229,255,0.06)',
+                padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>Construtor de Estratégias</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+                    {/* SuperTrend */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.supertrend ? '#00e5ff' : '#64748b', fontWeight: 700 }}>SuperTrend (ATR)</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, supertrend: !prev.supertrend }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.supertrend ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.supertrend ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
+
+                    {/* RSI */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.rsi ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Força Relativa (RSI)</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, rsi: !prev.rsi }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.rsi ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.rsi ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
+
+                    {/* MACD */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.macd ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Cruzamento MACD</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, macd: !prev.macd }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.macd ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.macd ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
+
+                    {/* EMAs */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.emas ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Alinhamento de Médias</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, emas: !prev.emas }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.emas ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.emas ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
                     </div>
                 </div>
             </div>
