@@ -77,6 +77,25 @@ type RadarItem = {
     error: boolean;
     flashing: boolean;
     lastUpdate: Date | null;
+    // valores brutos calculados pela API (entry ± ATR)
+    entryRaw: number;
+    stopLossRaw: number;
+    takeProfitRaw: number;
+};
+
+// ─── Trade rastreado pelo Radar ────────────────────────────────────────────
+type ActiveTrade = {
+    id: string;
+    asset: string;
+    direction: 'COMPRA' | 'VENDA';
+    entryRaw: number;
+    stopLossRaw: number;
+    takeProfitRaw: number;
+    openTime: Date;
+    stars: number;
+    status: 'ACOMPANHANDO' | 'GAIN' | 'STOP';
+    closePrice?: number;
+    points?: number;
 };
 
 // ─── Audio helper ──────────────────────────────────────────────────────────
@@ -162,6 +181,7 @@ export default function SinaisIA() {
     const [radarData, setRadarData] = useState<Record<string, RadarItem>>({});
     const [favorites, setFavorites] = useState<FavoriteAsset[]>([]);
     const [countdown, setCountdown] = useState(120);
+    const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
     const prevSignals = useRef<Record<string, string>>({});
 
     // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
@@ -291,6 +311,28 @@ export default function SinaisIA() {
         return data;
     };
 
+    // Salva trade fechado no Supabase (silencioso — erro apenas no console)
+    const closeTradeInSupabase = async (trade: ActiveTrade, closePrice: number, resultado: 'GAIN' | 'STOP') => {
+        try {
+            await supabase.from('trading_history').insert({
+                ativo: trade.asset,
+                timeframe: '5m',
+                sinal_ia: trade.direction,
+                preco: String(trade.entryRaw),
+                entry_price: trade.entryRaw,
+                stop_loss: trade.stopLossRaw,
+                take_profit: trade.takeProfitRaw,
+                close_price: closePrice,
+                resultado,
+                pontos: trade.points ?? 0,
+                open_time: trade.openTime.toISOString(),
+                close_time: new Date().toISOString(),
+            });
+        } catch (err) {
+            console.error('[Radar] Falha ao salvar trade no Supabase:', err);
+        }
+    };
+
     // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
     const fetchOne = async (fav: FavoriteAsset) => {
         try {
@@ -312,10 +354,64 @@ export default function SinaisIA() {
             const changed = oldSig !== undefined && oldSig !== direction;
             prevSignals.current[fav.value] = direction;
 
+            const currentPriceRaw: number = m5Data.priceRaw ?? 0;
+            const entryRaw: number = m5Data.entryRaw ?? currentPriceRaw;
+            const stopLossRaw: number = m5Data.stopLossRaw ?? 0;
+            const takeProfitRaw: number = m5Data.takeProfitRaw ?? 0;
+
+            // ── Verificar trades abertos deste ativo ─────────────────────────
+            if (currentPriceRaw > 0) {
+                setActiveTrades(prev => {
+                    const next = prev.map(trade => {
+                        if (trade.asset !== fav.value || trade.status !== 'ACOMPANHANDO') return trade;
+
+                        const isGain = trade.direction === 'COMPRA'
+                            ? currentPriceRaw >= trade.takeProfitRaw
+                            : currentPriceRaw <= trade.takeProfitRaw;
+
+                        const isStop = trade.direction === 'COMPRA'
+                            ? currentPriceRaw <= trade.stopLossRaw
+                            : currentPriceRaw >= trade.stopLossRaw;
+
+                        if (isGain || isStop) {
+                            const resultado: 'GAIN' | 'STOP' = isGain ? 'GAIN' : 'STOP';
+                            const points = isGain
+                                ? Math.abs(trade.takeProfitRaw - trade.entryRaw)
+                                : -Math.abs(trade.stopLossRaw - trade.entryRaw);
+                            const closed: ActiveTrade = {
+                                ...trade,
+                                status: resultado,
+                                closePrice: currentPriceRaw,
+                                points,
+                            };
+                            closeTradeInSupabase(closed, currentPriceRaw, resultado);
+                            return closed;
+                        }
+                        return trade;
+                    });
+                    return next;
+                });
+            }
+
+            // ── Registrar novo trade ao detectar mudança de sinal ────────────
+            if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
+                const newTrade: ActiveTrade = {
+                    id: `${fav.value}-${Date.now()}`,
+                    asset: fav.value,
+                    direction: direction as 'COMPRA' | 'VENDA',
+                    entryRaw,
+                    stopLossRaw,
+                    takeProfitRaw,
+                    openTime: new Date(),
+                    stars,
+                    status: 'ACOMPANHANDO',
+                };
+                setActiveTrades(prev => [newTrade, ...prev.slice(0, 19)]); // mantém até 20 no log
+            }
+
             if (changed) {
                 if (active) playAlert(stars, direction === 'COMPRA' ? 'buy' : 'sell');
             } else if (stars === 3 && oldSig === undefined) {
-                // Primeira carga já com 3 estrelas — ping de elite (só se o radar estiver ativo)
                 if (active) playAlert(3, direction === 'COMPRA' ? 'buy' : 'sell');
             }
 
@@ -323,7 +419,6 @@ export default function SinaisIA() {
                 ...prev,
                 [fav.value]: {
                     asset: fav,
-                    // Reutiliza dados do M5 para preço/rsi/trend (evita chamada extra)
                     price: m5Data.price ?? '—',
                     rsi14: m5Data.rsi14 ?? '—',
                     trend: m5Data.trend ?? '—',
@@ -335,6 +430,9 @@ export default function SinaisIA() {
                     error: false,
                     flashing: changed,
                     lastUpdate: new Date(),
+                    entryRaw,
+                    stopLossRaw,
+                    takeProfitRaw,
                 },
             }));
 
@@ -354,6 +452,7 @@ export default function SinaisIA() {
                         asset: fav, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
+                        entryRaw: 0, stopLossRaw: 0, takeProfitRaw: 0,
                     }),
                     loading: false,
                     error: false, // silencioso — dados anteriores ficam na tela
@@ -372,6 +471,7 @@ export default function SinaisIA() {
                         asset: f, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
+                        entryRaw: 0, stopLossRaw: 0, takeProfitRaw: 0,
                     }),
                     loading: true, error: false,
                 };
@@ -653,12 +753,175 @@ export default function SinaisIA() {
                                             }}>{item.loading ? '…' : item.trend}</strong>
                                         </span>
                                     </div>
+
+                                    {/* Linha 3: Dimensionamento da Posição — dados reais da API (entry ± ATR) */}
+                                    {!item.loading && item.stopLossRaw > 0 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <ShieldCheck style={{ width: '12px', height: '12px', color: '#00e5ff' }} />
+                                                <span style={{ fontSize: '10px', color: '#64748b' }}>Dimensionamento da Posição</span>
+                                                <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>
+                                                    SL {item.signal === 'COMPRA' ? '+' : '-'}{Math.abs(item.entryRaw - item.stopLossRaw).toFixed(item.stopLossRaw > 100 ? 2 : 4)} pts
+                                                </span>
+                                            </div>
+                                            {(() => {
+                                                const calc = calculateSuggestedLot(accountBalance, riskPercentage, item.entryRaw, item.stopLossRaw, item.asset.value);
+                                                if (!calc.valid) {
+                                                    return <span style={{ fontSize: '10px', color: '#64748b' }}>⏳ {calc.message}</span>;
+                                                }
+                                                return (
+                                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '3px 10px', borderRadius: '6px' }}>
+                                                        <span style={{ color: '#00e5ff' }}>{calc.lotLabel}</span>
+                                                        <span style={{ color: '#475569', margin: '0 4px' }}>|</span>
+                                                        <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 )}
             </div>
+
+            {/* ════════════════════════════════════════
+                LOG DE PERFORMANCE EM TEMPO REAL
+                ════════════════════════════════════════ */}
+            {activeTrades.length > 0 && (
+                <div style={{ margin: '0 0 0', borderRadius: '0' }}>
+                    {/* Header do Log */}
+                    <div style={{
+                        background: '#0a0f1a',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        borderBottom: 'none',
+                        padding: '14px 24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Radio style={{ width: '14px', height: '14px', color: '#00e5ff' }} />
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#e2e8f0' }}>Log de Performance</span>
+                            <span style={{
+                                fontSize: '10px', fontWeight: 700, padding: '2px 8px',
+                                borderRadius: '20px', background: 'rgba(0,229,255,0.1)',
+                                color: '#00e5ff', border: '1px solid rgba(0,229,255,0.2)',
+                            }}>
+                                {activeTrades.filter(t => t.status === 'ACOMPANHANDO').length} aberto(s)
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setActiveTrades([])}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                            <X style={{ width: '12px', height: '12px' }} /> Limpar Log
+                        </button>
+                    </div>
+
+                    {/* Cards de trades */}
+                    <div style={{
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        borderTop: 'none',
+                        background: '#080d16',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1px',
+                    }}>
+                        {activeTrades.map(trade => {
+                            const isOpen = trade.status === 'ACOMPANHANDO';
+                            const isGain = trade.status === 'GAIN';
+                            const borderColor = isOpen ? 'rgba(0,229,255,0.15)' : isGain ? 'rgba(0,230,118,0.25)' : 'rgba(239,68,68,0.25)';
+                            const accentColor = isOpen ? '#00e5ff' : isGain ? '#00e676' : '#ef4444';
+                            const timeStr = trade.openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            const dirColor = trade.direction === 'COMPRA' ? '#00e676' : '#ef4444';
+                            const ptsFmt = trade.points !== undefined
+                                ? `${trade.points >= 0 ? '+' : ''}${trade.points.toFixed(trade.entryRaw > 100 ? 2 : 4)} pts`
+                                : null;
+
+                            return (
+                                <div key={trade.id} style={{
+                                    padding: '14px 24px',
+                                    borderLeft: `3px solid ${borderColor}`,
+                                    background: isOpen
+                                        ? 'rgba(0,229,255,0.02)'
+                                        : isGain
+                                            ? 'rgba(0,230,118,0.03)'
+                                            : 'rgba(239,68,68,0.03)',
+                                    display: 'grid',
+                                    gridTemplateColumns: 'auto 1fr auto',
+                                    alignItems: 'center',
+                                    gap: '16px',
+                                }}>
+                                    {/* Col 1: Direção + Estrelas */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', minWidth: '52px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 800, color: dirColor, letterSpacing: '0.5px' }}>
+                                            {trade.direction}
+                                        </span>
+                                        <span style={{ fontSize: '11px', color: '#f59e0b', letterSpacing: '-1px' }}>
+                                            {'★'.repeat(trade.stars)}{'☆'.repeat(3 - trade.stars)}
+                                        </span>
+                                    </div>
+
+                                    {/* Col 2: Ativo + Níveis + Timestamp */}
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#fff' }}>{trade.asset}</span>
+                                            <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#475569' }}>⏱ {timeStr}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#64748b' }}>
+                                                <span style={{ color: '#94a3b8' }}>Entrada </span>
+                                                {trade.entryRaw.toFixed(trade.entryRaw > 100 ? 2 : 4)}
+                                            </span>
+                                            <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#ef4444' }}>
+                                                <span style={{ color: '#94a3b8' }}>SL </span>
+                                                {trade.stopLossRaw.toFixed(trade.stopLossRaw > 100 ? 2 : 4)}
+                                            </span>
+                                            <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#4ade80' }}>
+                                                <span style={{ color: '#94a3b8' }}>TP </span>
+                                                {trade.takeProfitRaw.toFixed(trade.takeProfitRaw > 100 ? 2 : 4)}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Col 3: Status / Pontuação */}
+                                    <div style={{ textAlign: 'right' }}>
+                                        {isOpen ? (
+                                            <span style={{
+                                                fontSize: '10px', fontWeight: 700,
+                                                color: accentColor,
+                                                background: `${accentColor}15`,
+                                                padding: '4px 10px', borderRadius: '20px',
+                                                border: `1px solid ${accentColor}30`,
+                                                animation: 'pulse 2s infinite',
+                                                display: 'inline-block',
+                                            }}>
+                                                ● Acompanhando Alvo...
+                                            </span>
+                                        ) : (
+                                            <div>
+                                                <div style={{ fontSize: '16px', fontWeight: 900, color: accentColor, lineHeight: 1 }}>
+                                                    {ptsFmt}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px' }}>
+                                                    {isGain ? '🏆 Take Profit' : '🛑 Stop Loss'}
+                                                </div>
+                                                {trade.closePrice && (
+                                                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#334155', marginTop: '2px' }}>
+                                                        Fechou em {trade.closePrice.toFixed(trade.closePrice > 100 ? 2 : 4)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* ── Header Sinais IA ── */}
             <div style={{ background: '#0d1117', border: '1px solid rgba(0,229,255,0.08)', borderBottom: 'none', borderRadius: '16px 16px 0 0', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -300,6 +300,10 @@ export async function POST(req: NextRequest) {
             takeProfit2: f(result.takeProfit2),
             takeProfit3: f(result.takeProfit3),
             riskReward: result.riskReward,        // "1:2"
+            // ─── Valores brutos para cálculo de lote ────────────────────────
+            entryRaw: result.entry,
+            stopLossRaw: result.stopLoss,
+            takeProfitRaw: result.takeProfit2,    // alvo principal (1:2)
         });
 
     } catch (err: unknown) {
