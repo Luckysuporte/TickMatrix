@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle, Settings, X, Check } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
 
 // ─── Sinais Recentes — começa vazio, pronto para receber dados reais ─────────
@@ -10,6 +10,30 @@ const RECENT_SIGNALS: {
     badgeColor: string; result: string; pct: string; time: string;
     stats: string; positive: boolean;
 }[] = [];
+
+// ─── Ativos disponíveis no Filtro Sniper ────────────────────────────────────
+const SNIPER_ASSET_GROUPS = [
+    {
+        group: 'Ouro & Índices',
+        assets: [
+            { value: 'XAU/USD', label: 'XAU/USD', description: 'Ouro / Dólar' },
+            { value: 'MNQ', label: 'MNQ', description: 'Micro Nasdaq Futures' },
+            { value: 'MYM', label: 'MYM', description: 'Micro Dow Jones Futures' },
+            { value: 'MGC', label: 'MGC', description: 'Micro Gold Futures' },
+        ],
+    },
+    {
+        group: 'Forex',
+        assets: [
+            { value: 'USD/CHF', label: 'USD/CHF', description: 'Dólar / Franco Suíço' },
+            { value: 'AUD/EUR', label: 'AUD/EUR', description: 'Dólar Australiano / Euro' },
+            { value: 'AUD/JPY', label: 'AUD/JPY', description: 'Dólar Australiano / Iene' },
+            { value: 'AUD/GBP', label: 'AUD/GBP', description: 'Dólar Australiano / Libra' },
+        ],
+    },
+];
+const ALL_SNIPER_VALUES = SNIPER_ASSET_GROUPS.flatMap(g => g.assets.map(a => a.value));
+const LS_KEY = 'tickmatrix:sniper:selectedAssets';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type TFData = { signal: string; signalStrength: string };
@@ -117,6 +141,36 @@ export default function SinaisIA() {
     const [favorites, setFavorites] = useState<FavoriteAsset[]>([]);
     const [countdown, setCountdown] = useState(120);
     const prevSignals = useRef<Record<string, string>>({});
+
+    // ── Filtro Sniper ───────────────────────────────────────────────────────
+    const [filterOpen, setFilterOpen] = useState(false);
+    const [selectedSignalAssets, setSelectedSignalAssets] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem(LS_KEY);
+            return saved ? JSON.parse(saved) : ALL_SNIPER_VALUES;
+        } catch { return ALL_SNIPER_VALUES; }
+    });
+
+    const toggleSniperAsset = (value: string) => {
+        setSelectedSignalAssets(prev => {
+            const next = prev.includes(value)
+                ? prev.filter(v => v !== value)
+                : [...prev, value];
+            try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+        });
+    };
+
+    const selectAll = () => {
+        setSelectedSignalAssets(ALL_SNIPER_VALUES);
+        try { localStorage.setItem(LS_KEY, JSON.stringify(ALL_SNIPER_VALUES)); } catch { /* ignore */ }
+    };
+
+    const clearAll = () => {
+        setSelectedSignalAssets([]);
+        try { localStorage.setItem(LS_KEY, JSON.stringify([])); } catch { /* ignore */ }
+    };
+    // ────────────────────────────────────────────────────────────────────────
 
     useEffect(() => { setFavorites(getFavorites()); }, []);
 
@@ -514,7 +568,33 @@ export default function SinaisIA() {
                     </h2>
                     <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0' }}>Sinais de trading gerados por IA com alta confiança</p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Botão Filtro Sniper */}
+                    <button
+                        onClick={() => setFilterOpen(true)}
+                        title="Filtrar Ativos (Modo Sniper)"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
+                            border: '1px solid rgba(0,229,255,0.25)',
+                            background: selectedSignalAssets.length < ALL_SNIPER_VALUES.length
+                                ? 'rgba(0,229,255,0.12)'
+                                : 'rgba(255,255,255,0.04)',
+                            color: selectedSignalAssets.length < ALL_SNIPER_VALUES.length ? '#00e5ff' : '#64748b',
+                            fontSize: '11px', fontWeight: 700, transition: 'all 0.2s',
+                        }}
+                    >
+                        <Settings style={{ width: '13px', height: '13px' }} />
+                        Sniper
+                        <span style={{
+                            background: 'rgba(0,229,255,0.2)', color: '#00e5ff',
+                            fontSize: '10px', fontWeight: 900, padding: '1px 6px',
+                            borderRadius: '10px', minWidth: '18px', textAlign: 'center',
+                        }}>
+                            {selectedSignalAssets.length}/{ALL_SNIPER_VALUES.length}
+                        </span>
+                    </button>
+                    {/* Toggle Ativo/Inativo */}
                     <span style={{ fontSize: '12px', color: active ? '#00e5ff' : '#475569', fontWeight: 700 }}>{active ? 'Ativo' : 'Inativo'}</span>
                     <div onClick={() => setActive(!active)} style={{ width: '44px', height: '24px', borderRadius: '12px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', background: active ? '#00e5ff' : '#1e293b' }}>
                         <div style={{ position: 'absolute', top: '3px', left: active ? '23px' : '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }} />
@@ -617,11 +697,26 @@ export default function SinaisIA() {
                         {/* Textos */}
                         <div style={{ textAlign: 'center' }}>
                             <p style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', margin: '0 0 6px' }}>
-                                Nenhuma oportunidade de Elite detectada no momento.
+                                Modo Sniper ativado.
                             </p>
-                            <p style={{ fontSize: '11px', color: '#334155', margin: 0, letterSpacing: '0.02em' }}>
-                                Monitorando o mercado em busca de sinais de alta confluência...
+                            <p style={{ fontSize: '11px', color: '#334155', margin: '0 0 10px', letterSpacing: '0.02em' }}>
+                                Aguardando oportunidades de Elite nos ativos selecionados...
                             </p>
+                            {selectedSignalAssets.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center', marginBottom: '4px' }}>
+                                    {selectedSignalAssets.map(v => (
+                                        <span key={v} style={{
+                                            fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '5px',
+                                            background: 'rgba(0,229,255,0.08)', color: '#00e5ff',
+                                            border: '1px solid rgba(0,229,255,0.18)',
+                                        }}>{v}</span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p style={{ fontSize: '11px', color: '#ef4444', margin: 0 }}>
+                                    ⚠ Nenhum ativo selecionado no filtro Sniper.
+                                </p>
+                            )}
                         </div>
                         {/* Linha decorativa */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
@@ -659,6 +754,148 @@ export default function SinaisIA() {
                     ))
                 )}
             </div>
+
+            {/* ════════════════════════════════════════
+                MODAL — Filtro Sniper
+            ════════════════════════════════════════ */}
+            {filterOpen && (
+                <>
+                    {/* Overlay */}
+                    <div
+                        onClick={() => setFilterOpen(false)}
+                        style={{
+                            position: 'fixed', inset: 0, zIndex: 80,
+                            background: 'rgba(0,0,0,0.65)',
+                            backdropFilter: 'blur(4px)',
+                        }}
+                    />
+                    {/* Painel */}
+                    <div style={{
+                        position: 'fixed', top: '50%', left: '50%',
+                        transform: 'translate(-50%,-50%)',
+                        zIndex: 81, width: '100%', maxWidth: '420px',
+                        background: '#0d1117',
+                        border: '1px solid rgba(0,229,255,0.2)',
+                        borderRadius: '20px',
+                        boxShadow: '0 24px 60px rgba(0,0,0,0.8)',
+                        overflow: 'hidden',
+                    }}>
+                        {/* Header do modal */}
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '18px 22px 14px',
+                            borderBottom: '1px solid rgba(255,255,255,0.06)',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                    width: '32px', height: '32px', borderRadius: '9px',
+                                    background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.2)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                    <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
+                                </div>
+                                <div>
+                                    <p style={{ fontSize: '14px', fontWeight: 800, color: '#fff', margin: 0 }}>Filtro Sniper</p>
+                                    <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>Selecione os ativos que deseja monitorar</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setFilterOpen(false)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', display: 'flex', padding: '4px' }}
+                            >
+                                <X style={{ width: '18px', height: '18px' }} />
+                            </button>
+                        </div>
+
+                        {/* Ações rápidas */}
+                        <div style={{
+                            display: 'flex', gap: '8px', padding: '12px 22px',
+                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        }}>
+                            <button onClick={selectAll} style={{
+                                flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
+                                border: '1px solid rgba(0,230,118,0.25)', background: 'rgba(0,230,118,0.08)',
+                                color: '#00e676', fontSize: '12px', fontWeight: 700,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                            }}>
+                                <Check style={{ width: '13px', height: '13px' }} /> Selecionar Todos
+                            </button>
+                            <button onClick={clearAll} style={{
+                                flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
+                                border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)',
+                                color: '#64748b', fontSize: '12px', fontWeight: 700,
+                            }}>
+                                Limpar Seleção
+                            </button>
+                        </div>
+
+                        {/* Lista de checkboxes agrupada */}
+                        <div style={{ padding: '10px 22px 20px', maxHeight: '360px', overflowY: 'auto' }}>
+                            {SNIPER_ASSET_GROUPS.map(group => (
+                                <div key={group.group} style={{ marginBottom: '16px' }}>
+                                    <p style={{
+                                        fontSize: '10px', fontWeight: 800, color: '#475569',
+                                        letterSpacing: '0.1em', textTransform: 'uppercase',
+                                        margin: '12px 0 8px',
+                                    }}>{group.group}</p>
+                                    {group.assets.map(asset => {
+                                        const checked = selectedSignalAssets.includes(asset.value);
+                                        return (
+                                            <div
+                                                key={asset.value}
+                                                onClick={() => toggleSniperAsset(asset.value)}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '12px',
+                                                    padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
+                                                    marginBottom: '4px', transition: 'background 0.15s',
+                                                    background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
+                                                    border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                                                }}
+                                            >
+                                                {/* Checkbox visual */}
+                                                <div style={{
+                                                    width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                                                    border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
+                                                    background: checked ? '#00e5ff' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.15s',
+                                                }}>
+                                                    {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
+                                                </div>
+                                                <div>
+                                                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0 }}>{asset.label}</p>
+                                                    <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>{asset.description}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            padding: '14px 22px',
+                            borderTop: '1px solid rgba(255,255,255,0.06)',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        }}>
+                            <span style={{ fontSize: '12px', color: '#475569' }}>
+                                <strong style={{ color: '#00e5ff' }}>{selectedSignalAssets.length}</strong> de {ALL_SNIPER_VALUES.length} ativos selecionados
+                            </span>
+                            <button
+                                onClick={() => setFilterOpen(false)}
+                                style={{
+                                    padding: '9px 22px', borderRadius: '10px', cursor: 'pointer', border: 'none',
+                                    background: 'linear-gradient(135deg, #00e5ff, #0099cc)',
+                                    color: '#000', fontWeight: 800, fontSize: '13px',
+                                }}
+                            >
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
 
         </div>
     );
