@@ -38,7 +38,7 @@ async function fetchBinanceClosePrices(symbol: string, interval: string): Promis
 async function fetchTwelveDataClosePrices(symbol: string, interval: string): Promise<number[]> {
     const apiKey = process.env.TWELVE_DATA_API_KEY;
     if (!apiKey) throw new Error('TWELVE_DATA_API_KEY not configured');
-    const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=100&apikey=${apiKey}`;
+    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${interval}&outputsize=100&apikey=${apiKey}`;
     const res = await fetch(url, { next: { revalidate: 0 } });
     if (!res.ok) throw new Error(`Twelve Data HTTP error ${res.status}`);
     const json = await res.json();

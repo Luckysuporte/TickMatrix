@@ -128,7 +128,7 @@ export default function SinaisIA() {
 
     // Busca único TF de um ativo (retorna objeto completo)
     const fetchTF = async (fav: FavoriteAsset, timeframe: string) => {
-        const symbol = fav.value.replace('/', '');
+        const symbol = fav.value; // Twelve Data exige XAU/USD (com barra); encodeURIComponent na route trata a URL
         const res = await fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
