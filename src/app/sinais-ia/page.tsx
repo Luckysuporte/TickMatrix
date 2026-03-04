@@ -34,6 +34,7 @@ const SNIPER_ASSET_GROUPS = [
 ];
 const ALL_SNIPER_VALUES = SNIPER_ASSET_GROUPS.flatMap(g => g.assets.map(a => a.value));
 const LS_KEY = 'tickmatrix:sniper:selectedAssets';
+const LS_KEY_CUSTOM = 'tickmatrix:sniper:customAssets';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type TFData = { signal: string; signalStrength: string };
@@ -144,6 +145,17 @@ export default function SinaisIA() {
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [filterOpen, setFilterOpen] = useState(false);
+    const [newAssetInput, setNewAssetInput] = useState('');
+
+    // Ativos customizados (adicionados pelo usuário)
+    const [customAssets, setCustomAssets] = useState<{ value: string; label: string; description: string }[]>(() => {
+        try {
+            const saved = localStorage.getItem(LS_KEY_CUSTOM);
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
+
+    // Ativos selecionados (padrão + customizados)
     const [selectedSignalAssets, setSelectedSignalAssets] = useState<string[]>(() => {
         try {
             const saved = localStorage.getItem(LS_KEY);
@@ -151,24 +163,73 @@ export default function SinaisIA() {
         } catch { return ALL_SNIPER_VALUES; }
     });
 
+    const persist = (selected: string[]) => {
+        try { localStorage.setItem(LS_KEY, JSON.stringify(selected)); } catch { /* ignore */ }
+    };
+    const persistCustom = (custom: { value: string; label: string; description: string }[]) => {
+        try { localStorage.setItem(LS_KEY_CUSTOM, JSON.stringify(custom)); } catch { /* ignore */ }
+    };
+
     const toggleSniperAsset = (value: string) => {
         setSelectedSignalAssets(prev => {
-            const next = prev.includes(value)
-                ? prev.filter(v => v !== value)
-                : [...prev, value];
-            try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+            const next = prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value];
+            persist(next);
+            return next;
+        });
+    };
+
+    const addCustomAsset = () => {
+        const sym = newAssetInput.trim().toUpperCase();
+        if (!sym) return;
+        // Evita duplicata (tanto em padrão quanto customizados)
+        const allValues = [...ALL_SNIPER_VALUES, ...customAssets.map(a => a.value)];
+        if (allValues.includes(sym)) {
+            // Só marca como selecionado se já existir
+            setSelectedSignalAssets(prev => {
+                if (prev.includes(sym)) return prev;
+                const next = [...prev, sym];
+                persist(next);
+                return next;
+            });
+            setNewAssetInput('');
+            return;
+        }
+        const newEntry = { value: sym, label: sym, description: 'Ativo customizado' };
+        setCustomAssets(prev => {
+            const next = [...prev, newEntry];
+            persistCustom(next);
+            return next;
+        });
+        setSelectedSignalAssets(prev => {
+            const next = [...prev, sym];
+            persist(next);
+            return next;
+        });
+        setNewAssetInput('');
+    };
+
+    const removeCustomAsset = (value: string) => {
+        setCustomAssets(prev => {
+            const next = prev.filter(a => a.value !== value);
+            persistCustom(next);
+            return next;
+        });
+        setSelectedSignalAssets(prev => {
+            const next = prev.filter(v => v !== value);
+            persist(next);
             return next;
         });
     };
 
     const selectAll = () => {
-        setSelectedSignalAssets(ALL_SNIPER_VALUES);
-        try { localStorage.setItem(LS_KEY, JSON.stringify(ALL_SNIPER_VALUES)); } catch { /* ignore */ }
+        const all = [...ALL_SNIPER_VALUES, ...customAssets.map(a => a.value)];
+        setSelectedSignalAssets(all);
+        persist(all);
     };
 
     const clearAll = () => {
         setSelectedSignalAssets([]);
-        try { localStorage.setItem(LS_KEY, JSON.stringify([])); } catch { /* ignore */ }
+        persist([]);
     };
     // ────────────────────────────────────────────────────────────────────────
 
@@ -807,10 +868,54 @@ export default function SinaisIA() {
                             </button>
                         </div>
 
-                        {/* Ações rápidas */}
+                        {/* ── Input de busca / adição ──────────────────────────── */}
+                        <div style={{
+                            padding: '14px 22px 0',
+                        }}>
+                            <p style={{
+                                fontSize: '10px', fontWeight: 800, color: '#475569',
+                                letterSpacing: '0.1em', textTransform: 'uppercase',
+                                margin: '0 0 8px',
+                            }}>Adicionar Ativo</p>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <input
+                                    type="text"
+                                    value={newAssetInput}
+                                    onChange={e => setNewAssetInput(e.target.value.toUpperCase())}
+                                    onKeyDown={e => e.key === 'Enter' && addCustomAsset()}
+                                    placeholder="Ex: WIN1!, WDOF25, PETR4..."
+                                    style={{
+                                        flex: 1, background: '#0a0d12',
+                                        border: '1px solid rgba(255,255,255,0.10)',
+                                        borderRadius: '9px', padding: '9px 14px',
+                                        color: '#fff', fontSize: '13px', outline: 'none',
+                                        fontFamily: 'monospace', letterSpacing: '0.05em',
+                                        transition: 'border-color 0.15s',
+                                    }}
+                                    onFocus={e => (e.currentTarget.style.borderColor = 'rgba(0,229,255,0.4)')}
+                                    onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
+                                />
+                                <button
+                                    onClick={addCustomAsset}
+                                    disabled={!newAssetInput.trim()}
+                                    style={{
+                                        width: '40px', height: '40px', borderRadius: '9px',
+                                        border: 'none', cursor: newAssetInput.trim() ? 'pointer' : 'not-allowed',
+                                        background: newAssetInput.trim()
+                                            ? 'linear-gradient(135deg, #00e5ff, #0099cc)'
+                                            : 'rgba(255,255,255,0.06)',
+                                        color: newAssetInput.trim() ? '#000' : '#334155',
+                                        fontSize: '20px', fontWeight: 900,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        transition: 'all 0.2s', flexShrink: 0,
+                                    }}
+                                >+</button>
+                            </div>
+                        </div>
+
+                        {/* ── Ações rápidas ───────────────────────────────── */}
                         <div style={{
                             display: 'flex', gap: '8px', padding: '12px 22px',
-                            borderBottom: '1px solid rgba(255,255,255,0.04)',
                         }}>
                             <button onClick={selectAll} style={{
                                 flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
@@ -829,14 +934,78 @@ export default function SinaisIA() {
                             </button>
                         </div>
 
-                        {/* Lista de checkboxes agrupada */}
-                        <div style={{ padding: '10px 22px 20px', maxHeight: '360px', overflowY: 'auto' }}>
+                        {/* ── Lista de checkboxes ───────────────────────────── */}
+                        <div style={{
+                            padding: '0 22px 20px', maxHeight: '340px', overflowY: 'auto',
+                            borderTop: '1px solid rgba(255,255,255,0.04)',
+                        }}>
+
+                            {/* Ativos customizados */}
+                            {customAssets.length > 0 && (
+                                <div style={{ marginBottom: '4px' }}>
+                                    <p style={{
+                                        fontSize: '10px', fontWeight: 800, color: '#00e5ff',
+                                        letterSpacing: '0.1em', textTransform: 'uppercase',
+                                        margin: '14px 0 8px', display: 'flex', alignItems: 'center', gap: '6px',
+                                    }}>
+                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00e5ff', display: 'inline-block' }} />
+                                        Meus Ativos
+                                    </p>
+                                    {customAssets.map(asset => {
+                                        const checked = selectedSignalAssets.includes(asset.value);
+                                        return (
+                                            <div key={asset.value} style={{
+                                                display: 'flex', alignItems: 'center', gap: '10px',
+                                                padding: '9px 12px', borderRadius: '10px', cursor: 'pointer',
+                                                marginBottom: '4px', transition: 'background 0.15s',
+                                                background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
+                                                border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                                            }}>
+                                                {/* Checkbox */}
+                                                <div
+                                                    onClick={() => toggleSniperAsset(asset.value)}
+                                                    style={{
+                                                        width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                                                        border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
+                                                        background: checked ? '#00e5ff' : 'transparent',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.15s',
+                                                    }}
+                                                >
+                                                    {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
+                                                </div>
+                                                {/* Label */}
+                                                <div style={{ flex: 1 }} onClick={() => toggleSniperAsset(asset.value)}>
+                                                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
+                                                    <p style={{ fontSize: '10px', color: '#475569', margin: 0 }}>Ativo personalizado</p>
+                                                </div>
+                                                {/* Botão remover */}
+                                                <button
+                                                    onClick={e => { e.stopPropagation(); removeCustomAsset(asset.value); }}
+                                                    title="Remover ativo"
+                                                    style={{
+                                                        background: 'none', border: 'none', cursor: 'pointer',
+                                                        color: '#334155', padding: '3px', display: 'flex',
+                                                        borderRadius: '4px', transition: 'color 0.15s',
+                                                    }}
+                                                    onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                                    onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+                                                >
+                                                    <X style={{ width: '13px', height: '13px' }} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Sugestões padrão */}
                             {SNIPER_ASSET_GROUPS.map(group => (
-                                <div key={group.group} style={{ marginBottom: '16px' }}>
+                                <div key={group.group} style={{ marginBottom: '4px' }}>
                                     <p style={{
                                         fontSize: '10px', fontWeight: 800, color: '#475569',
                                         letterSpacing: '0.1em', textTransform: 'uppercase',
-                                        margin: '12px 0 8px',
+                                        margin: '14px 0 8px',
                                     }}>{group.group}</p>
                                     {group.assets.map(asset => {
                                         const checked = selectedSignalAssets.includes(asset.value);
@@ -852,7 +1021,6 @@ export default function SinaisIA() {
                                                     border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
                                                 }}
                                             >
-                                                {/* Checkbox visual */}
                                                 <div style={{
                                                     width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
                                                     border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
@@ -880,7 +1048,7 @@ export default function SinaisIA() {
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         }}>
                             <span style={{ fontSize: '12px', color: '#475569' }}>
-                                <strong style={{ color: '#00e5ff' }}>{selectedSignalAssets.length}</strong> de {ALL_SNIPER_VALUES.length} ativos selecionados
+                                <strong style={{ color: '#00e5ff' }}>{selectedSignalAssets.length}</strong> de {ALL_SNIPER_VALUES.length + customAssets.length} ativos selecionados
                             </span>
                             <button
                                 onClick={() => setFilterOpen(false)}
