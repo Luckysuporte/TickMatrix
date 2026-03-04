@@ -230,7 +230,7 @@ export default function SinaisIA() {
         const res = await fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol, timeframe, assetType: fav.assetType }),
+            body: JSON.stringify({ symbol, timeframe, assetType: fav.assetType, filters: activeFilters }),
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(`[${fav.value} ${timeframe}] HTTP ${res.status}: ${data.error ?? JSON.stringify(data)}`);
@@ -349,7 +349,7 @@ export default function SinaisIA() {
         }, 1000);
         return () => clearInterval(tick);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [favorites]);
+    }, [favorites, activeFilters]);
 
     const rowBg = (positive: boolean, badge: string) => {
         if (badge === 'Stop') return 'rgba(255,61,0,0.06)';

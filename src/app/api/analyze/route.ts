@@ -94,7 +94,11 @@ function fmtPrice(n: number, symbol: string): string {
 const RISK_PERCENT = 0.005;   // 0.5%
 const REWARD_RATIO = 2;       // Primary target is 1:2
 
-function computeSignal(candles: Candle[], symbol: string): {
+function computeSignal(
+    candles: Candle[],
+    symbol: string,
+    filters: { supertrend: boolean; rsi: boolean; macd: boolean; emas: boolean } = { supertrend: true, rsi: false, macd: false, emas: false }
+): {
     signal: 'COMPRA' | 'VENDA' | 'NEUTRO';
     signalStrength: 'FORTE' | 'FRACA' | 'NEUTRO';
     price: number;
@@ -144,9 +148,18 @@ function computeSignal(candles: Candle[], symbol: string): {
 
     const riskAmount = atr14 * 1.5;
 
-    if (price > sma20 && rsi14 < 35) {
+    const isBuyBase = price > sma20;
+    const isSellBase = price < sma20;
+
+    const rsiBuyConfirm = rsi14 > 50;
+    const rsiSellConfirm = rsi14 < 50;
+
+    const buyCondition = filters.rsi ? (isBuyBase && rsiBuyConfirm) : isBuyBase;
+    const sellCondition = filters.rsi ? (isSellBase && rsiSellConfirm) : isSellBase;
+
+    if (buyCondition) {
         signal = 'COMPRA';
-        signalStrength = rsi14 < 25 ? 'FORTE' : 'FRACA';
+        signalStrength = rsi14 > 60 ? 'FORTE' : 'FRACA';
         entry = price;
         stopLoss = price - riskAmount;           // SL a 1.5x ATR
         takeProfit1 = price + riskAmount * 1;    // R:R 1:1
@@ -154,9 +167,9 @@ function computeSignal(candles: Candle[], symbol: string): {
         takeProfit3 = price + riskAmount * 3;    // R:R 1:3
         riskRewardString = `1:${REWARD_RATIO}`;
 
-    } else if (price < sma20 && rsi14 > 65) {
+    } else if (sellCondition) {
         signal = 'VENDA';
-        signalStrength = rsi14 > 75 ? 'FORTE' : 'FRACA';
+        signalStrength = rsi14 < 40 ? 'FORTE' : 'FRACA';
         entry = price;
         stopLoss = price + riskAmount;           // SL a 1.5x ATR
         takeProfit1 = price - riskAmount * 1;    // R:R 1:1
@@ -191,12 +204,14 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json() as {
             symbol: string; timeframe: string; assetType: string;
+            filters?: { supertrend: boolean; rsi: boolean; macd: boolean; emas: boolean };
         };
 
         // Sanitize & validate inputs
         const symbol = (body.symbol ?? '').trim().toUpperCase();
         const timeframe = (body.timeframe ?? '').trim();
         const assetType = (body.assetType ?? '').trim();
+        const filters = body.filters ?? { supertrend: true, rsi: false, macd: false, emas: false };
 
         console.log(`[analyze] Recebido: symbol="${symbol}" timeframe="${timeframe}" assetType="${assetType}"`);
 
@@ -221,7 +236,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Insufficient data from provider' }, { status: 422 });
         }
 
-        const result = computeSignal(candles, symbol);
+        const result = computeSignal(candles, symbol, filters);
         const f = (n: number) => fmtPrice(n, symbol);
 
         return NextResponse.json({
