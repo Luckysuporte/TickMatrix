@@ -146,6 +146,42 @@ export default function SinaisIA() {
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [filterOpen, setFilterOpen] = useState(false);
     const [newAssetInput, setNewAssetInput] = useState('');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState('');
+
+    useEffect(() => {
+        const term = newAssetInput.trim();
+        if (!term) {
+            setSearchResults([]);
+            setSearchError('');
+            return;
+        }
+
+        const timeoutId = setTimeout(async () => {
+            setIsSearching(true);
+            setSearchError('');
+            try {
+                const res = await fetch(`/api/symbol-search?q=${encodeURIComponent(term)}`);
+                if (!res.ok) throw new Error('Search failed');
+                const data = await res.json();
+                if (data.results && data.results.length > 0) {
+                    setSearchResults(data.results);
+                } else {
+                    setSearchResults([]);
+                    setSearchError('Nenhum ativo encontrado na Twelve Data');
+                }
+            } catch {
+                setSearchResults([]);
+                setSearchError('Erro ao buscar ativos');
+            } finally {
+                setIsSearching(false);
+            }
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+    }, [newAssetInput]);
 
     // Ativos customizados (adicionados pelo usuário)
     const [customAssets, setCustomAssets] = useState<{ value: string; label: string; description: string }[]>(() => {
@@ -178,8 +214,9 @@ export default function SinaisIA() {
         });
     };
 
-    const addCustomAsset = () => {
-        const sym = newAssetInput.trim().toUpperCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const addAssetFromSearch = (asset: any) => {
+        const sym = asset.symbol.toUpperCase();
         if (!sym) return;
         // Evita duplicata (tanto em padrão quanto customizados)
         const allValues = [...ALL_SNIPER_VALUES, ...customAssets.map(a => a.value)];
@@ -192,9 +229,11 @@ export default function SinaisIA() {
                 return next;
             });
             setNewAssetInput('');
+            setSearchResults([]);
             return;
         }
-        const newEntry = { value: sym, label: sym, description: 'Ativo customizado' };
+        const description = asset.instrument_name ? `${asset.instrument_name} (${asset.exchange})` : 'Ativo customizado';
+        const newEntry = { value: sym, label: sym, description };
         setCustomAssets(prev => {
             const next = [...prev, newEntry];
             persistCustom(next);
@@ -206,6 +245,7 @@ export default function SinaisIA() {
             return next;
         });
         setNewAssetInput('');
+        setSearchResults([]);
     };
 
     const removeCustomAsset = (value: string) => {
@@ -870,47 +910,66 @@ export default function SinaisIA() {
 
                         {/* ── Input de busca / adição ──────────────────────────── */}
                         <div style={{
-                            padding: '14px 22px 0',
+                            padding: '14px 22px 0', position: 'relative'
                         }}>
                             <p style={{
                                 fontSize: '10px', fontWeight: 800, color: '#475569',
                                 letterSpacing: '0.1em', textTransform: 'uppercase',
                                 margin: '0 0 8px',
-                            }}>Adicionar Ativo</p>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <input
-                                    type="text"
-                                    value={newAssetInput}
-                                    onChange={e => setNewAssetInput(e.target.value.toUpperCase())}
-                                    onKeyDown={e => e.key === 'Enter' && addCustomAsset()}
-                                    placeholder="Ex: WIN1!, WDOF25, PETR4..."
-                                    style={{
-                                        flex: 1, background: '#0a0d12',
-                                        border: '1px solid rgba(255,255,255,0.10)',
-                                        borderRadius: '9px', padding: '9px 14px',
-                                        color: '#fff', fontSize: '13px', outline: 'none',
-                                        fontFamily: 'monospace', letterSpacing: '0.05em',
-                                        transition: 'border-color 0.15s',
-                                    }}
-                                    onFocus={e => (e.currentTarget.style.borderColor = 'rgba(0,229,255,0.4)')}
-                                    onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
-                                />
-                                <button
-                                    onClick={addCustomAsset}
-                                    disabled={!newAssetInput.trim()}
-                                    style={{
-                                        width: '40px', height: '40px', borderRadius: '9px',
-                                        border: 'none', cursor: newAssetInput.trim() ? 'pointer' : 'not-allowed',
-                                        background: newAssetInput.trim()
-                                            ? 'linear-gradient(135deg, #00e5ff, #0099cc)'
-                                            : 'rgba(255,255,255,0.06)',
-                                        color: newAssetInput.trim() ? '#000' : '#334155',
-                                        fontSize: '20px', fontWeight: 900,
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        transition: 'all 0.2s', flexShrink: 0,
-                                    }}
-                                >+</button>
-                            </div>
+                            }}>Adicionar Ativo (Busca)</p>
+                            <input
+                                type="text"
+                                value={newAssetInput}
+                                onChange={e => setNewAssetInput(e.target.value.toUpperCase())}
+                                placeholder="Digite para buscar na Twelve Data..."
+                                style={{
+                                    width: '100%', background: '#0a0d12',
+                                    border: '1px solid rgba(255,255,255,0.10)',
+                                    borderRadius: '9px', padding: '10px 14px',
+                                    color: '#fff', fontSize: '13px', outline: 'none',
+                                    fontFamily: 'monospace', letterSpacing: '0.05em',
+                                    transition: 'border-color 0.15s',
+                                }}
+                                onFocus={e => (e.currentTarget.style.borderColor = 'rgba(0,229,255,0.4)')}
+                                onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
+                            />
+
+                            {/* Dropdown de Autocomplete */}
+                            {(newAssetInput.trim().length > 0 && (isSearching || searchResults.length > 0 || searchError)) && (
+                                <div style={{
+                                    position: 'absolute', top: 'calc(100% + 4px)', left: '22px', right: '22px',
+                                    background: '#121822', border: '1px solid rgba(0,229,255,0.2)',
+                                    borderRadius: '10px', zIndex: 10, maxHeight: '200px', overflowY: 'auto',
+                                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                                }}>
+                                    {isSearching ? (
+                                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>Buscando...</div>
+                                    ) : searchError ? (
+                                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#ef4444' }}>{searchError}</div>
+                                    ) : (
+                                        searchResults.map(res => (
+                                            <div
+                                                key={`${res.symbol}-${res.exchange}`}
+                                                onClick={() => addAssetFromSearch(res)}
+                                                style={{
+                                                    padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                                    cursor: 'pointer', transition: 'background 0.15s',
+                                                }}
+                                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,0.08)')}
+                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#fff', fontFamily: 'monospace' }}>{res.symbol}</span>
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{res.exchange}</span>
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {res.instrument_name}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* ── Ações rápidas ───────────────────────────────── */}
