@@ -4,6 +4,8 @@ const ti = require('technicalindicators');
 const RSI = ti.RSI;
 const SMA = ti.SMA;
 const ATR = ti.ATR;
+const MACD = ti.MACD;
+const EMA = ti.EMA;
 
 interface Candle {
     high: number;
@@ -133,6 +135,26 @@ function computeSignal(
     const rsiValues = RSI.calculate({ period: 14, values: closes });
     const rsi14 = rsiValues[rsiValues.length - 1] ?? 50;
 
+    // MACD 12, 26, 9
+    const macdValues = MACD.calculate({
+        values: closes,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false
+    });
+    // O último valor pode ser nulo se não houver candles suficientes
+    const lastMacd = macdValues.length > 0 ? macdValues[macdValues.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
+    const macdLine = lastMacd.MACD ?? 0;
+    const macdSignal = lastMacd.signal ?? 0;
+
+    // EMAs 20 e 50
+    const ema20Arr = EMA.calculate({ period: 20, values: closes });
+    const ema50Arr = EMA.calculate({ period: 50, values: closes });
+    const ema20 = ema20Arr[ema20Arr.length - 1] ?? price;
+    const ema50 = ema50Arr[ema50Arr.length - 1] ?? price;
+
     // ATR 14
     const atrValues = ATR.calculate({ period: 14, high: highs, low: lows, close: closes });
     const atr14 = atrValues[atrValues.length - 1] ?? (price * RISK_PERCENT); // fallback caso erro
@@ -148,18 +170,35 @@ function computeSignal(
 
     const riskAmount = atr14 * 1.5;
 
+    // --- REGRAS DE CONFLUÊNCIA ---
     const isBuyBase = price > sma20;
     const isSellBase = price < sma20;
 
+    // Confirmações
     const rsiBuyConfirm = rsi14 > 50;
     const rsiSellConfirm = rsi14 < 50;
 
-    const buyCondition = filters.rsi ? (isBuyBase && rsiBuyConfirm) : isBuyBase;
-    const sellCondition = filters.rsi ? (isSellBase && rsiSellConfirm) : isSellBase;
+    const macdBuyConfirm = macdLine > macdSignal;
+    const macdSellConfirm = macdLine < macdSignal;
+
+    const emasBuyConfirm = ema20 > ema50;
+    const emasSellConfirm = ema20 < ema50;
+
+    // Pipeline Final
+    // O sinal precisa passar no Base (SuperTrend Genérico provisório) e passar ESTRITAMENTE em todo filtro ligado.
+    const buyCondition = isBuyBase
+        && (!filters.rsi || rsiBuyConfirm)
+        && (!filters.macd || macdBuyConfirm)
+        && (!filters.emas || emasBuyConfirm);
+
+    const sellCondition = isSellBase
+        && (!filters.rsi || rsiSellConfirm)
+        && (!filters.macd || macdSellConfirm)
+        && (!filters.emas || emasSellConfirm);
 
     if (buyCondition) {
         signal = 'COMPRA';
-        signalStrength = rsi14 > 60 ? 'FORTE' : 'FRACA';
+        signalStrength = (rsiBuyConfirm && macdBuyConfirm) ? 'FORTE' : 'FRACA';
         entry = price;
         stopLoss = price - riskAmount;           // SL a 1.5x ATR
         takeProfit1 = price + riskAmount * 1;    // R:R 1:1
@@ -169,7 +208,7 @@ function computeSignal(
 
     } else if (sellCondition) {
         signal = 'VENDA';
-        signalStrength = rsi14 < 40 ? 'FORTE' : 'FRACA';
+        signalStrength = (rsiSellConfirm && macdSellConfirm) ? 'FORTE' : 'FRACA';
         entry = price;
         stopLoss = price + riskAmount;           // SL a 1.5x ATR
         takeProfit1 = price - riskAmount * 1;    // R:R 1:1
