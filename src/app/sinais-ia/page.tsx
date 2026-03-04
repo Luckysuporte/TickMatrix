@@ -9,6 +9,8 @@ const RECENT_SIGNALS: {
     id: number; asset: string; direction: string; badge: string;
     badgeColor: string; stopLoss: string; takeProfit: string; time: string;
     stats: string; positive: boolean;
+    // mock para mock calculation:
+    suggestedLot: string;
 }[] = [];
 
 // ─── Ativos disponíveis no Filtro Sniper ────────────────────────────────────
@@ -158,6 +160,11 @@ export default function SinaisIA() {
         macd: false,
         emas: false,
     });
+
+    // ── Gestão de Risco (Risk Management) ───────────────────────────────────
+    const [accountBalance, setAccountBalance] = useState(50000);
+    const [riskPercentage, setRiskPercentage] = useState(1.0);
+    const [dailyDrawdown, setDailyDrawdown] = useState(500);
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [filterOpen, setFilterOpen] = useState(false);
@@ -755,6 +762,72 @@ export default function SinaisIA() {
                 </div>
             </div>
 
+            {/* ── Dashboard de Gestão de Risco (Risk Management) ── */}
+            <div style={{
+                background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)',
+                borderTop: 'none', padding: '16px 24px', display: 'flex', flexWrap: 'wrap', gap: '20px'
+            }}>
+                <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <ShieldCheck style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#e2e8f0' }}>Gestão de Risco da Conta</span>
+                </div>
+
+                {/* Saldo da Conta */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Saldo da Conta ($)</label>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>$</span>
+                        <input
+                            type="number"
+                            value={accountBalance}
+                            onChange={(e) => setAccountBalance(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#fff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* Risco Máximo */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Risco por Operação (%)</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="number" step="0.1"
+                            value={riskPercentage}
+                            onChange={(e) => setRiskPercentage(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 24px 8px 12px', color: '#fff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                        <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>%</span>
+                    </div>
+                </div>
+
+                {/* Limite de Perda Diária */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Daily Drawdown Limit</label>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#f87171', fontSize: '13px' }}>$</span>
+                        <input
+                            type="number"
+                            value={dailyDrawdown}
+                            onChange={(e) => setDailyDrawdown(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(248,113,113,0.2)',
+                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#f87171', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+            </div>
+
             {/* ── Sinais Ativos ── */}
             <div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
                 <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -862,24 +935,37 @@ export default function SinaisIA() {
                     </div>
                 ) : (
                     RECENT_SIGNALS.map((sig, i) => (
-                        <div key={sig.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '12px 24px', background: rowBg(sig.positive, sig.badge), borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                        <div key={sig.id} style={{ padding: '12px 24px', background: rowBg(sig.positive, sig.badge), borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
                             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
                             onMouseLeave={e => (e.currentTarget.style.background = rowBg(sig.positive, sig.badge))}
                         >
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                    {sig.direction === 'buy' ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} /> : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />}
-                                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
-                                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                        {sig.direction === 'buy' ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} /> : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />}
+                                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
+                                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.2)' }}>SL: {sig.stopLoss}</span>
+                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(74,222,128,0.2)' }}>TP: {sig.takeProfit}</span>
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.2)' }}>SL: {sig.stopLoss}</span>
-                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(74,222,128,0.2)' }}>TP: {sig.takeProfit}</span>
+                                <div style={{ textAlign: 'right' }}>
+                                    <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 4px' }}>{sig.time}</p>
+                                    <p style={{ fontSize: '11px', color: '#475569', margin: 0, fontFamily: 'monospace' }}>{sig.stats}</p>
                                 </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 4px' }}>{sig.time}</p>
-                                <p style={{ fontSize: '11px', color: '#475569', margin: 0, fontFamily: 'monospace' }}>{sig.stats}</p>
+                            <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.03)', margin: '14px 0' }} />
+                            {/* Calculadora de Lote e Risco */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <ShieldCheck style={{ width: '14px', height: '14px', color: '#00e5ff' }} />
+                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>Dimensionamento da Posição</span>
+                                </div>
+                                <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '6px' }}>
+                                    Risco Alvo: <span style={{ color: '#f87171' }}>${((accountBalance * riskPercentage) / 100).toFixed(2)}</span> | <span style={{ color: '#00e5ff' }}>Calculando...</span>
+                                </div>
                             </div>
                         </div>
                     ))
