@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle, Settings, X, Check, ShieldCheck } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
 import { calculateSuggestedLot } from '@/lib/riskCalc';
+import { supabase } from '@/lib/supabase';
 
 // ─── Sinais Recentes — mock demonstrativo XAU/USD ─────────
 const RECENT_SIGNALS: {
@@ -157,6 +158,7 @@ function TFChip({ label, data }: { label: string; data: TFData | null }) {
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function SinaisIA() {
     const [active, setActive] = useState(false);
+    const [togglingRadar, setTogglingRadar] = useState(false);
     const [radarData, setRadarData] = useState<Record<string, RadarItem>>({});
     const [favorites, setFavorites] = useState<FavoriteAsset[]>([]);
     const [countdown, setCountdown] = useState(120);
@@ -236,6 +238,42 @@ export default function SinaisIA() {
     // ────────────────────────────────────────────────────────────────────────
 
     useEffect(() => { setFavorites(getFavorites()); }, []);
+
+    // ── Sincronização do Toggle com o Supabase ───────────────────────────────
+    useEffect(() => {
+        (async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase
+                .from('profiles')
+                .select('is_radar_active')
+                .eq('id', user.id)
+                .single();
+            if (data) setActive(data.is_radar_active ?? false);
+        })();
+    }, []);
+
+    const toggleRadarActive = async () => {
+        if (togglingRadar) return;
+        const next = !active;
+        setTogglingRadar(true);
+        setActive(next); // optimistic update
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                await supabase.from('profiles').upsert({
+                    id: user.id,
+                    is_radar_active: next,
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'id' });
+            }
+        } catch (err) {
+            console.error('[Radar] Falha ao salvar estado do toggle:', err);
+            setActive(!next); // rollback em caso de erro
+        } finally {
+            setTogglingRadar(false);
+        }
+    };
 
     // Helper de delay
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -658,9 +696,26 @@ export default function SinaisIA() {
                         </span>
                     </button>
                     {/* Toggle Ativo/Inativo */}
-                    <span style={{ fontSize: '12px', color: active ? '#00e5ff' : '#475569', fontWeight: 700 }}>{active ? 'Ativo' : 'Inativo'}</span>
-                    <div onClick={() => setActive(!active)} style={{ width: '44px', height: '24px', borderRadius: '12px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', background: active ? '#00e5ff' : '#1e293b' }}>
-                        <div style={{ position: 'absolute', top: '3px', left: active ? '23px' : '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }} />
+                    <span style={{ fontSize: '12px', color: togglingRadar ? '#334155' : active ? '#00e5ff' : '#475569', fontWeight: 700, transition: 'color 0.2s' }}>
+                        {togglingRadar ? 'Salvando...' : active ? 'Ativo' : 'Inativo'}
+                    </span>
+                    <div
+                        onClick={toggleRadarActive}
+                        title={togglingRadar ? 'Aguarde...' : active ? 'Desativar Radar' : 'Ativar Radar'}
+                        style={{
+                            width: '44px', height: '24px', borderRadius: '12px', position: 'relative',
+                            cursor: togglingRadar ? 'wait' : 'pointer',
+                            transition: 'background 0.2s, opacity 0.2s',
+                            background: active ? '#00e5ff' : '#1e293b',
+                            opacity: togglingRadar ? 0.55 : 1,
+                            pointerEvents: togglingRadar ? 'none' : 'auto',
+                        }}
+                    >
+                        <div style={{
+                            position: 'absolute', top: '3px', left: active ? '23px' : '3px',
+                            width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+                            transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)'
+                        }} />
                     </div>
                 </div>
             </div>
