@@ -14,12 +14,13 @@ const RECENT_SIGNALS: {
 // ─── Ativos disponíveis no Filtro Sniper ────────────────────────────────────
 const SNIPER_ASSET_GROUPS = [
     {
-        group: 'Ouro & Índices',
+        group: 'Índices/Futuros',
         assets: [
-            { value: 'XAU/USD', label: 'XAU/USD', description: 'Ouro / Dólar' },
-            { value: 'MNQ', label: 'MNQ', description: 'Micro Nasdaq Futures' },
-            { value: 'MYM', label: 'MYM', description: 'Micro Dow Jones Futures' },
-            { value: 'MGC', label: 'MGC', description: 'Micro Gold Futures' },
+            { value: 'MNQ', label: 'MNQ', description: 'Micro E-mini Nasdaq' },
+            { value: 'MYM', label: 'MYM', description: 'Micro E-mini Dow Jones' },
+            { value: 'MGC', label: 'MGC', description: 'Micro Gold' },
+            { value: 'WINJ26', label: 'WINJ26', description: 'Mini Índice' },
+            { value: 'WDOF25', label: 'WDOF25', description: 'Mini Dólar' },
         ],
     },
     {
@@ -29,6 +30,13 @@ const SNIPER_ASSET_GROUPS = [
             { value: 'AUD/EUR', label: 'AUD/EUR', description: 'Dólar Australiano / Euro' },
             { value: 'AUD/JPY', label: 'AUD/JPY', description: 'Dólar Australiano / Iene' },
             { value: 'AUD/GBP', label: 'AUD/GBP', description: 'Dólar Australiano / Libra' },
+            { value: 'EUR/USD', label: 'EUR/USD', description: 'Euro / Dólar Americano' },
+        ],
+    },
+    {
+        group: 'Commodities',
+        assets: [
+            { value: 'XAU/USD', label: 'XAU/USD', description: 'Ouro vs Dólar' },
         ],
     },
 ];
@@ -145,43 +153,7 @@ export default function SinaisIA() {
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [filterOpen, setFilterOpen] = useState(false);
-    const [newAssetInput, setNewAssetInput] = useState('');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-    const [searchError, setSearchError] = useState('');
-
-    useEffect(() => {
-        const term = newAssetInput.trim();
-        if (!term) {
-            setSearchResults([]);
-            setSearchError('');
-            return;
-        }
-
-        const timeoutId = setTimeout(async () => {
-            setIsSearching(true);
-            setSearchError('');
-            try {
-                const res = await fetch(`/api/symbol-search?q=${encodeURIComponent(term)}`);
-                if (!res.ok) throw new Error('Search failed');
-                const data = await res.json();
-                if (data.results && data.results.length > 0) {
-                    setSearchResults(data.results);
-                } else {
-                    setSearchResults([]);
-                    setSearchError('Nenhum ativo encontrado na Twelve Data');
-                }
-            } catch {
-                setSearchResults([]);
-                setSearchError('Erro ao buscar ativos');
-            } finally {
-                setIsSearching(false);
-            }
-        }, 500);
-
-        return () => clearTimeout(timeoutId);
-    }, [newAssetInput]);
+    const [selectedCategory, setSelectedCategory] = useState<string>('Índices/Futuros');
 
     // Ativos customizados (adicionados pelo usuário)
     const [customAssets, setCustomAssets] = useState<{ value: string; label: string; description: string }[]>(() => {
@@ -212,40 +184,6 @@ export default function SinaisIA() {
             persist(next);
             return next;
         });
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const addAssetFromSearch = (asset: any) => {
-        const sym = asset.symbol.toUpperCase();
-        if (!sym) return;
-        // Evita duplicata (tanto em padrão quanto customizados)
-        const allValues = [...ALL_SNIPER_VALUES, ...customAssets.map(a => a.value)];
-        if (allValues.includes(sym)) {
-            // Só marca como selecionado se já existir
-            setSelectedSignalAssets(prev => {
-                if (prev.includes(sym)) return prev;
-                const next = [...prev, sym];
-                persist(next);
-                return next;
-            });
-            setNewAssetInput('');
-            setSearchResults([]);
-            return;
-        }
-        const description = asset.instrument_name ? `${asset.instrument_name} (${asset.exchange})` : 'Ativo customizado';
-        const newEntry = { value: sym, label: sym, description };
-        setCustomAssets(prev => {
-            const next = [...prev, newEntry];
-            persistCustom(next);
-            return next;
-        });
-        setSelectedSignalAssets(prev => {
-            const next = [...prev, sym];
-            persist(next);
-            return next;
-        });
-        setNewAssetInput('');
-        setSearchResults([]);
     };
 
     const removeCustomAsset = (value: string) => {
@@ -908,88 +846,38 @@ export default function SinaisIA() {
                             </button>
                         </div>
 
-                        {/* ── Input de busca / adição ──────────────────────────── */}
+                        {/* ── Selecionador de Categorias (Abas) ───────────────────────── */}
                         <div style={{
-                            padding: '14px 22px 0', position: 'relative'
+                            padding: '14px 22px 0',
+                            display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px',
+                            scrollbarWidth: 'none', msOverflowStyle: 'none',
                         }}>
-                            <p style={{
-                                fontSize: '10px', fontWeight: 800, color: '#475569',
-                                letterSpacing: '0.1em', textTransform: 'uppercase',
-                                margin: '0 0 8px',
-                            }}>Adicionar Ativo (Busca)</p>
-                            <input
-                                type="text"
-                                value={newAssetInput}
-                                onChange={e => setNewAssetInput(e.target.value.toUpperCase())}
-                                placeholder="Digite para buscar na Twelve Data..."
-                                style={{
-                                    width: '100%', background: '#0a0d12',
-                                    border: '1px solid rgba(255,255,255,0.10)',
-                                    borderRadius: '9px', padding: '10px 14px',
-                                    color: '#fff', fontSize: '13px', outline: 'none',
-                                    fontFamily: 'monospace', letterSpacing: '0.05em',
-                                    transition: 'border-color 0.15s',
-                                }}
-                                onFocus={e => (e.currentTarget.style.borderColor = 'rgba(0,229,255,0.4)')}
-                                onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
-                            />
-
-                            {/* Dropdown de Autocomplete (Híbrido) */}
-                            {(newAssetInput.trim().length > 0) && (
-                                <div style={{
-                                    position: 'absolute', top: 'calc(100% + 4px)', left: '22px', right: '22px',
-                                    background: '#121822', border: '1px solid rgba(0,229,255,0.2)',
-                                    borderRadius: '10px', zIndex: 10, maxHeight: '200px', overflowY: 'auto',
-                                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                                }}>
-                                    {/* Opção fixa de Adição Manual (Forçada) */}
-                                    <div
-                                        onClick={() => addAssetFromSearch({ symbol: newAssetInput.trim(), instrument_name: 'Ativo Forçado', exchange: 'Custom' })}
-                                        style={{
-                                            padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)',
-                                            cursor: 'pointer', transition: 'background 0.15s',
-                                            background: 'rgba(0,229,255,0.05)',
-                                        }}
-                                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,0.15)')}
-                                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,229,255,0.05)')}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ width: '20px', height: '20px', borderRadius: '5px', background: '#00e5ff', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900 }}>+</div>
-                                            <div>
-                                                <span style={{ fontSize: '13px', color: '#fff' }}>Adicionar <strong style={{ color: '#00e5ff', fontFamily: 'monospace' }}>"{newAssetInput.trim()}"</strong></span>
-                                                <div style={{ fontSize: '10px', color: '#00e5ff', opacity: 0.8 }}>Forçar ativo personalizado (B3, etc)</div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Resultados da API */}
-                                    {isSearching ? (
-                                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>Buscando na Twelve Data...</div>
-                                    ) : searchError ? (
-                                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#ef4444' }}>{searchError}</div>
-                                    ) : (
-                                        searchResults.map(res => (
-                                            <div
-                                                key={`${res.symbol}-${res.exchange}`}
-                                                onClick={() => addAssetFromSearch(res)}
-                                                style={{
-                                                    padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                                    cursor: 'pointer', transition: 'background 0.15s',
-                                                }}
-                                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,0.08)')}
-                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                            >
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#fff', fontFamily: 'monospace' }}>{res.symbol}</span>
-                                                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{res.exchange}</span>
-                                                </div>
-                                                <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    {res.instrument_name}
-                                                </div>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
+                            {SNIPER_ASSET_GROUPS.map(cat => (
+                                <button
+                                    key={cat.group}
+                                    onClick={() => setSelectedCategory(cat.group)}
+                                    style={{
+                                        padding: '6px 14px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
+                                        cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', border: 'none',
+                                        background: selectedCategory === cat.group ? '#00e5ff' : 'rgba(255,255,255,0.06)',
+                                        color: selectedCategory === cat.group ? '#000' : '#94a3b8',
+                                    }}
+                                >
+                                    {cat.group}
+                                </button>
+                            ))}
+                            {customAssets.length > 0 && (
+                                <button
+                                    onClick={() => setSelectedCategory('Customizados')}
+                                    style={{
+                                        padding: '6px 14px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
+                                        cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', border: 'none',
+                                        background: selectedCategory === 'Customizados' ? '#00e5ff' : 'rgba(255,255,255,0.06)',
+                                        color: selectedCategory === 'Customizados' ? '#000' : '#94a3b8',
+                                    }}
+                                >
+                                    Customizados
+                                </button>
                             )}
                         </div>
 
@@ -1014,23 +902,50 @@ export default function SinaisIA() {
                             </button>
                         </div>
 
-                        {/* ── Lista de checkboxes ───────────────────────────── */}
+                        {/* ── Lista de checkboxes por Categoria selecionada ───────────────── */}
                         <div style={{
                             padding: '0 22px 20px', maxHeight: '340px', overflowY: 'auto',
                             borderTop: '1px solid rgba(255,255,255,0.04)',
                         }}>
+                            {/* Rendereização do Grupo Escolhido (Padrão) */}
+                            {SNIPER_ASSET_GROUPS.filter(g => g.group === selectedCategory).map(group => (
+                                <div key={group.group} style={{ marginTop: '14px' }}>
+                                    {group.assets.map(asset => {
+                                        const checked = selectedSignalAssets.includes(asset.value);
+                                        return (
+                                            <div
+                                                key={asset.value}
+                                                onClick={() => toggleSniperAsset(asset.value)}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '12px',
+                                                    padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
+                                                    marginBottom: '4px', transition: 'background 0.15s',
+                                                    background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
+                                                    border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                                                    border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
+                                                    background: checked ? '#00e5ff' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.15s',
+                                                }}>
+                                                    {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
+                                                </div>
+                                                <div>
+                                                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
+                                                    <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>{asset.description}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
 
-                            {/* Ativos customizados */}
-                            {customAssets.length > 0 && (
-                                <div style={{ marginBottom: '4px' }}>
-                                    <p style={{
-                                        fontSize: '10px', fontWeight: 800, color: '#00e5ff',
-                                        letterSpacing: '0.1em', textTransform: 'uppercase',
-                                        margin: '14px 0 8px', display: 'flex', alignItems: 'center', gap: '6px',
-                                    }}>
-                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00e5ff', display: 'inline-block' }} />
-                                        Meus Ativos
-                                    </p>
+                            {/* Renderização da Tab Customizados (Retroativa) */}
+                            {selectedCategory === 'Customizados' && customAssets.length > 0 && (
+                                <div style={{ marginTop: '14px' }}>
                                     {customAssets.map(asset => {
                                         const checked = selectedSignalAssets.includes(asset.value);
                                         return (
@@ -1057,7 +972,7 @@ export default function SinaisIA() {
                                                 {/* Label */}
                                                 <div style={{ flex: 1 }} onClick={() => toggleSniperAsset(asset.value)}>
                                                     <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
-                                                    <p style={{ fontSize: '10px', color: '#475569', margin: 0 }}>Ativo personalizado</p>
+                                                    <p style={{ fontSize: '10px', color: '#475569', margin: 0 }}>Ativo personalizado antigo</p>
                                                 </div>
                                                 {/* Botão remover */}
                                                 <button
@@ -1078,47 +993,6 @@ export default function SinaisIA() {
                                     })}
                                 </div>
                             )}
-
-                            {/* Sugestões padrão */}
-                            {SNIPER_ASSET_GROUPS.map(group => (
-                                <div key={group.group} style={{ marginBottom: '4px' }}>
-                                    <p style={{
-                                        fontSize: '10px', fontWeight: 800, color: '#475569',
-                                        letterSpacing: '0.1em', textTransform: 'uppercase',
-                                        margin: '14px 0 8px',
-                                    }}>{group.group}</p>
-                                    {group.assets.map(asset => {
-                                        const checked = selectedSignalAssets.includes(asset.value);
-                                        return (
-                                            <div
-                                                key={asset.value}
-                                                onClick={() => toggleSniperAsset(asset.value)}
-                                                style={{
-                                                    display: 'flex', alignItems: 'center', gap: '12px',
-                                                    padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
-                                                    marginBottom: '4px', transition: 'background 0.15s',
-                                                    background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
-                                                    border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
-                                                }}
-                                            >
-                                                <div style={{
-                                                    width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                                                    border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
-                                                    background: checked ? '#00e5ff' : 'transparent',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    transition: 'all 0.15s',
-                                                }}>
-                                                    {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0 }}>{asset.label}</p>
-                                                    <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>{asset.description}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ))}
                         </div>
 
                         {/* Footer */}
@@ -1143,8 +1017,9 @@ export default function SinaisIA() {
                         </div>
                     </div>
                 </>
-            )}
+            )
+            }
 
-        </div>
+        </div >
     );
 }
