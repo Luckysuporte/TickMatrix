@@ -96,6 +96,7 @@ type ActiveTrade = {
     status: 'ACOMPANHANDO' | 'GAIN' | 'STOP';
     closePrice?: number;
     points?: number;
+    supabaseId?: string; // UUID retornado pelo INSERT no banco
 };
 
 // ─── Audio helper ──────────────────────────────────────────────────────────
@@ -182,6 +183,9 @@ export default function SinaisIA() {
     const [favorites, setFavorites] = useState<FavoriteAsset[]>([]);
     const [countdown, setCountdown] = useState(120);
     const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
+    const [historico, setHistorico] = useState<Record<string, unknown>[]>([]);
+    const [loadingHistorico, setLoadingHistorico] = useState(false);
+    const [showHistorico, setShowHistorico] = useState(false);
     const prevSignals = useRef<Record<string, string>>({});
 
     // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
@@ -311,10 +315,10 @@ export default function SinaisIA() {
         return data;
     };
 
-    // Salva trade fechado no Supabase (silencioso — erro apenas no console)
-    const closeTradeInSupabase = async (trade: ActiveTrade, closePrice: number, resultado: 'GAIN' | 'STOP') => {
+    // Insere novo trade no Supabase ao abrir (status ABERTO)
+    const openTradeInSupabase = async (trade: ActiveTrade): Promise<string | undefined> => {
         try {
-            await supabase.from('trading_history').insert({
+            const { data, error } = await supabase.from('trading_history').insert({
                 ativo: trade.asset,
                 timeframe: '5m',
                 sinal_ia: trade.direction,
@@ -322,16 +326,69 @@ export default function SinaisIA() {
                 entry_price: trade.entryRaw,
                 stop_loss: trade.stopLossRaw,
                 take_profit: trade.takeProfitRaw,
-                close_price: closePrice,
-                resultado,
-                pontos: trade.points ?? 0,
+                resultado: 'ABERTO',
                 open_time: trade.openTime.toISOString(),
-                close_time: new Date().toISOString(),
-            });
+            }).select('id').single();
+            if (error) throw error;
+            return data?.id as string | undefined;
         } catch (err) {
-            console.error('[Radar] Falha ao salvar trade no Supabase:', err);
+            console.error('[Radar] Falha ao abrir trade no Supabase:', err);
+            return undefined;
         }
     };
+
+    // Atualiza trade fechado no Supabase (UPDATE usando supabaseId)
+    const closeTradeInSupabase = async (trade: ActiveTrade, closePrice: number, resultado: 'GAIN' | 'STOP') => {
+        try {
+            if (trade.supabaseId) {
+                await supabase.from('trading_history').update({
+                    close_price: closePrice,
+                    resultado,
+                    pontos: trade.points ?? 0,
+                    close_time: new Date().toISOString(),
+                }).eq('id', trade.supabaseId);
+            } else {
+                // Fallback: INSERT se supabaseId não foi salvo
+                await supabase.from('trading_history').insert({
+                    ativo: trade.asset, timeframe: '5m', sinal_ia: trade.direction,
+                    preco: String(trade.entryRaw), entry_price: trade.entryRaw,
+                    stop_loss: trade.stopLossRaw, take_profit: trade.takeProfitRaw,
+                    close_price: closePrice, resultado,
+                    pontos: trade.points ?? 0,
+                    open_time: trade.openTime.toISOString(),
+                    close_time: new Date().toISOString(),
+                });
+            }
+        } catch (err) {
+            console.error('[Radar] Falha ao fechar trade no Supabase:', err);
+        }
+    };
+
+    // Busca histórico do dia do Supabase
+    const fetchHistorico = async () => {
+        setLoadingHistorico(true);
+        try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const { data } = await supabase
+                .from('trading_history')
+                .select('id, ativo, sinal_ia, entry_price, stop_loss, take_profit, close_price, resultado, pontos, open_time, close_time')
+                .gte('created_at', today.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(50);
+            setHistorico(data ?? []);
+        } catch (err) {
+            console.error('[Histórico] Falha ao buscar:', err);
+        } finally {
+            setLoadingHistorico(false);
+        }
+    };
+
+    // Re-busca histórico quando o painel for aberto
+    useEffect(() => {
+        if (showHistorico) fetchHistorico();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showHistorico]);
 
     // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
     const fetchOne = async (fav: FavoriteAsset) => {
@@ -406,7 +463,13 @@ export default function SinaisIA() {
                     stars,
                     status: 'ACOMPANHANDO',
                 };
-                setActiveTrades(prev => [newTrade, ...prev.slice(0, 19)]); // mantém até 20 no log
+                // Persiste abertura no Supabase e salva o UUID retornado
+                openTradeInSupabase(newTrade).then(supabaseId => {
+                    setActiveTrades(prev => [
+                        { ...newTrade, supabaseId },
+                        ...prev.slice(0, 19)
+                    ]);
+                });
             }
 
             if (changed) {
@@ -933,6 +996,24 @@ export default function SinaisIA() {
                     <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0' }}>Sinais de trading gerados por IA com alta confiança</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Botão Histórico de Hoje */}
+                    <button
+                        onClick={() => setShowHistorico(v => !v)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
+                            border: `1px solid ${showHistorico ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            background: showHistorico ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)',
+                            color: showHistorico ? '#fbbf24' : '#64748b',
+                            fontSize: '11px', fontWeight: 700,
+                        }}
+                    >
+                        <RefreshCw
+                            onClick={e => { e.stopPropagation(); if (showHistorico) fetchHistorico(); }}
+                            style={{ width: '12px', height: '12px', cursor: 'pointer' }}
+                        />
+                        Histórico de Hoje
+                    </button>
                     {/* Botão Filtro Sniper */}
                     <button
                         onClick={() => setFilterOpen(true)}
@@ -984,6 +1065,85 @@ export default function SinaisIA() {
             </div>
 
             {/* ── Desbloquear Sinais ── */}
+
+            {/* ══ HISTÓRICO DE HOJE ══ */}
+            {showHistorico && (
+                <div style={{ border: '1px solid rgba(251,191,36,0.15)', background: '#07090f', borderRadius: 0 }}>
+                    <div style={{
+                        padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            📅 Histórico de Hoje
+                            {loadingHistorico && <RefreshCw style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
+                            <span style={{ fontSize: '10px', color: '#475569', fontWeight: 400 }}>
+                                {historico.length} registros
+                            </span>
+                        </span>
+                        <button onClick={fetchHistorico} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#64748b', fontSize: '10px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <RefreshCw style={{ width: '10px', height: '10px' }} /> Atualizar
+                        </button>
+                    </div>
+
+                    {historico.length === 0 && !loadingHistorico && (
+                        <div style={{ padding: '24px', textAlign: 'center', color: '#334155', fontSize: '12px' }}>
+                            Nenhum sinal registrado hoje.
+                        </div>
+                    )}
+
+                    {historico.length > 0 && (
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                <thead>
+                                    <tr style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                        {['Horário', 'Ativo', 'Direção', 'Entrada', 'SL', 'TP', 'Fech.', 'Resultado', 'Pontos'].map(h => (
+                                            <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {historico.map((row, i) => {
+                                        const r = row as Record<string, unknown>;
+                                        const res = String(r.resultado ?? '');
+                                        const isGain = res === 'GAIN';
+                                        const isStop = res === 'STOP';
+                                        const isAberto = res === 'ABERTO';
+                                        const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
+                                        const fmt = (v: unknown) => v != null ? Number(v).toFixed(2) : '—';
+                                        const timeStr = r.open_time
+                                            ? new Date(String(r.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                                            : '—';
+                                        return (
+                                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#64748b', whiteSpace: 'nowrap' }}>⏱ {timeStr}</td>
+                                                <td style={{ padding: '8px 12px', fontWeight: 700, color: '#e2e8f0' }}>{String(r.ativo ?? '')}</td>
+                                                <td style={{ padding: '8px 12px', fontWeight: 800, color: String(r.sinal_ia) === 'COMPRA' ? '#00e676' : '#ef4444' }}>{String(r.sinal_ia ?? '')}</td>
+                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#94a3b8' }}>{fmt(r.entry_price)}</td>
+                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#f87171' }}>{fmt(r.stop_loss)}</td>
+                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#4ade80' }}>{fmt(r.take_profit)}</td>
+                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#64748b' }}>{fmt(r.close_price)}</td>
+                                                <td style={{ padding: '8px 12px' }}>
+                                                    <span style={{
+                                                        fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px',
+                                                        background: `${resColor}18`, color: resColor, border: `1px solid ${resColor}30`,
+                                                    }}>
+                                                        {isGain ? '🏆 GAIN' : isStop ? '🛑 STOP' : isAberto ? '● Em andamento' : res}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
+                                                    {r.pontos != null ? `${Number(r.pontos) >= 0 ? '+' : ''}${Number(r.pontos).toFixed(2)} pts` : '—'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ══ Desbloquear Sinais (original) ══ */}
             <div style={{ background: '#0f1722', border: '1px solid rgba(255,153,0,0.15)', padding: '14px 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                 <div>
                     <p style={{ fontSize: '13px', fontWeight: 800, color: '#ff9900', display: 'flex', alignItems: 'center', gap: '7px', margin: '0 0 4px' }}>
