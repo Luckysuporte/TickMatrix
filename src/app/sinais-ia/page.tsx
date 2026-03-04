@@ -4,15 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
 
-// ─── Mock data ─────────────────────────────────────────────────────────────
-const RECENT_SIGNALS = [
-    { id: 1, asset: 'GBPUSD', direction: 'buy', badge: 'Take', badgeColor: '#00e676', result: '+$21.10', pct: '+1.10%', time: '9h atrás', stats: '0.0T  +$21.1  1.0x  +$211.00', positive: true },
-    { id: 2, asset: 'GBPUSD', direction: 'buy', badge: 'Take', badgeColor: '#00e676', result: '+$44.20', pct: '+0.91%', time: '5h atrás', stats: '0.0T  +$44.7  1.0x  +$442.00', positive: true },
-    { id: 3, asset: 'BTCUSD', direction: 'sell', badge: 'Stop', badgeColor: '#ff3d00', result: '-$39.52', pct: '-0.70%', time: '18h atrás', stats: '0.0T  -$3.93  1.0x  -$395.20', positive: false },
-    { id: 4, asset: 'GBPUSD', direction: 'buy', badge: 'Take', badgeColor: '#00e676', result: '+$54.80', pct: '+0.19%', time: '13h atrás', stats: '0.0T  +$5.48  1.0x  +$548.00', positive: true },
-    { id: 5, asset: 'GBPUSD', direction: 'buy', badge: 'Take', badgeColor: '#00e676', result: '+$28.80', pct: '+0.18%', time: '7h atrás', stats: '0.0T  +$7.88  1.0x  +$288.00', positive: true },
-    { id: 6, asset: 'AUDUSD', direction: 'sell', badge: 'Stop', badgeColor: '#ff3d00', result: '-$33.30', pct: '-0.70%', time: '19h atrás', stats: '0.0T  -$3.25  1.0x  -$333.00', positive: false },
-];
+// ─── Sinais Recentes — começa vazio, pronto para receber dados reais ─────────
+const RECENT_SIGNALS: {
+    id: number; asset: string; direction: string; badge: string;
+    badgeColor: string; result: string; pct: string; time: string;
+    stats: string; positive: boolean;
+}[] = [];
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type TFData = { signal: string; signalStrength: string };
@@ -257,6 +254,7 @@ export default function SinaisIA() {
         if (badge === 'Stop') return 'rgba(255,61,0,0.06)';
         return positive ? 'rgba(0,230,118,0.04)' : 'transparent';
     };
+    // rowBg mantida para uso futuro quando sinais reais forem conectados
 
     // Ordenação: 3★ > 2★ > 1★, depois FORTE
     const radarItems = Object.values(radarData).sort((a, b) => {
@@ -576,29 +574,90 @@ export default function SinaisIA() {
                         <Zap style={{ width: '14px', height: '14px', color: '#ff9900' }} /> Sinais Recentes
                     </span>
                 </div>
-                {RECENT_SIGNALS.map((sig, i) => (
-                    <div key={sig.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '12px 24px', background: rowBg(sig.positive, sig.badge), borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = rowBg(sig.positive, sig.badge))}
-                    >
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                {sig.direction === 'buy' ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} /> : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />}
-                                <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
-                                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '12px', color: '#64748b' }}>$</span>
-                                <span style={{ fontSize: '13px', fontWeight: 700, color: sig.positive ? '#00e676' : '#ff3d00' }}>{sig.result}</span>
-                                <span style={{ fontSize: '11px', color: '#475569' }}>({sig.pct})</span>
+                {RECENT_SIGNALS.length === 0 ? (
+                    /* ── Empty State ─────────────────────────────────────────── */
+                    <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        justifyContent: 'center', padding: '40px 24px', gap: '14px',
+                    }}>
+                        {/* Ícone de radar animado */}
+                        <style>{`
+                            @keyframes radarSpin {
+                                0%   { transform: rotate(0deg);   opacity: 1; }
+                                50%  { transform: rotate(180deg); opacity: 0.5; }
+                                100% { transform: rotate(360deg); opacity: 1; }
+                            }
+                            @keyframes radarPing {
+                                0%, 100% { transform: scale(1);   opacity: 0.15; }
+                                50%       { transform: scale(1.6); opacity: 0; }
+                            }
+                        `}</style>
+                        <div style={{ position: 'relative', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {/* Anel pulsante */}
+                            <div style={{
+                                position: 'absolute', inset: 0, borderRadius: '50%',
+                                border: '2px solid rgba(0,229,255,0.35)',
+                                animation: 'radarPing 2.2s ease-in-out infinite',
+                            }} />
+                            {/* Ícone principal */}
+                            <div style={{
+                                width: '44px', height: '44px', borderRadius: '50%',
+                                background: 'rgba(0,229,255,0.07)',
+                                border: '1px solid rgba(0,229,255,0.2)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <Radio
+                                    style={{
+                                        width: '20px', height: '20px', color: '#00e5ff',
+                                        animation: 'radarSpin 3s linear infinite',
+                                    }}
+                                />
                             </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 4px' }}>{sig.time}</p>
-                            <p style={{ fontSize: '11px', color: '#475569', margin: 0, fontFamily: 'monospace' }}>{sig.stats}</p>
+                        {/* Textos */}
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', margin: '0 0 6px' }}>
+                                Nenhuma oportunidade de Elite detectada no momento.
+                            </p>
+                            <p style={{ fontSize: '11px', color: '#334155', margin: 0, letterSpacing: '0.02em' }}>
+                                Monitorando o mercado em busca de sinais de alta confluência...
+                            </p>
+                        </div>
+                        {/* Linha decorativa */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                            {[...Array(3)].map((_, i) => (
+                                <div key={i} style={{
+                                    width: '4px', height: '4px', borderRadius: '50%',
+                                    background: '#1e293b',
+                                }} />
+                            ))}
                         </div>
                     </div>
-                ))}
+                ) : (
+                    RECENT_SIGNALS.map((sig, i) => (
+                        <div key={sig.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '12px 24px', background: rowBg(sig.positive, sig.badge), borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = rowBg(sig.positive, sig.badge))}
+                        >
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    {sig.direction === 'buy' ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} /> : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />}
+                                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '12px', color: '#64748b' }}>$</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 700, color: sig.positive ? '#00e676' : '#ff3d00' }}>{sig.result}</span>
+                                    <span style={{ fontSize: '11px', color: '#475569' }}>({sig.pct})</span>
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 4px' }}>{sig.time}</p>
+                                <p style={{ fontSize: '11px', color: '#475569', margin: 0, fontFamily: 'monospace' }}>{sig.stats}</p>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
 
         </div>
