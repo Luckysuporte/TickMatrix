@@ -371,13 +371,13 @@ export default function SinaisIA() {
                 ativo: trade.asset,
                 timeframe: '5m',
                 sinal_ia: trade.direction,
-                preco: String(trade.entryRaw),
+                preco: String(trade.entryRaw || 0),
                 entry_price: trade.entryRaw,
                 stop_loss: trade.stopLossRaw,
                 take_profit_1: trade.takeProfit1Raw,
                 take_profit_2: trade.takeProfit2Raw,
                 take_profit_3: trade.takeProfit3Raw,
-                take_profit: trade.takeProfitRaw,
+                take_profit: trade.takeProfit3Raw, // Define o Alvo 3 como TP principal
                 max_target: trade.maxTargetReached ?? 0,
                 resultado: 'ABERTO',
                 open_time: trade.openTime.toISOString(),
@@ -388,12 +388,13 @@ export default function SinaisIA() {
             const { data, error } = await supabase.from('trading_history').insert(payload).select('id').single();
 
             if (error) {
-                const msg = `Supabase Insert Error: ${error.message} \nDetails: ${error.details}\nHint: ${error.hint}`;
+                const msg = `Supabase Error: ${error.message}`;
                 setInsertError(msg);
                 console.error(msg);
-                throw error;
+                return undefined;
             }
             return data?.id as string | undefined;
+
         } catch (err: any) {
             console.error('[Radar] Falha estrutural ao abrir trade no Supabase:', err);
             setInsertError(err?.message || 'Falha desconhecida no Insert');
