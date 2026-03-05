@@ -481,15 +481,20 @@ export default function SinaisIA() {
         setActiveTrades(prev => prev.filter(trade => {
             // Procura se esse trade.asset já foi fechado no histórico mais recente
             // (Assumimos que as inserções mais recentes estão no topo do array)
-            const dbRef = historico.find(h => {
-                const r = h as Record<string, unknown>;
-                return r.ativo === trade.asset && String(r.resultado) !== 'ABERTO';
-            });
+            const dbRef = trade.supabaseId
+                ? historico.find(h => (h as any).id === trade.supabaseId)
+                : historico.find(h => {
+                    const r = h as Record<string, unknown>;
+                    return r.ativo === trade.asset && String(r.resultado).toUpperCase() !== 'ABERTO';
+                });
+
             // Se achou um registro do mesmo ativo não aberto (fechado recentemente por sql ou ui), retira do local log.
             if (dbRef) {
-                // Verifica se o fechamento é posterior à abertura local (evita apagar trades novos após fechamento antigo)
-                const closeT = new Date(String((dbRef as any).close_time)).getTime();
-                if (closeT > trade.openTime.getTime()) return false;
+                const isAbertoDb = String((dbRef as any).resultado).toUpperCase() === 'ABERTO';
+                if (!isAbertoDb) {
+                    // Forcar UI a dropar se o banco considera fechado (GAIN/STOP/BREAKEVEN)
+                    return false;
+                }
             }
             return true;
         }));
