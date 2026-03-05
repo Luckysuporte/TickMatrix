@@ -1284,26 +1284,7 @@ export default function SinaisIA() {
                 </div>
             )}
 
-            {/* ══ Desbloquear Sinais (original) ══ */}
-            <div style={{ background: '#0f1722', border: '1px solid rgba(255,153,0,0.15)', padding: '14px 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-                <div>
-                    <p style={{ fontSize: '13px', fontWeight: 800, color: '#ff9900', display: 'flex', alignItems: 'center', gap: '7px', margin: '0 0 4px' }}>
-                        <Crown style={{ width: '14px', height: '14px' }} />
-                        Desbloquear Sinais
-                    </p>
-                    <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-                        🌟 <strong style={{ color: '#ff9900' }}>1 crédito PRO/hora</strong>{' '}
-                        <span style={{ color: '#475569' }}>Frequência: ativo</span>
-                    </p>
-                    <p style={{ fontSize: '11px', color: '#475569', margin: '4px 0 0' }}>Dica: Desative quando não estiver usando para economizar créditos</p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                    <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>OFF</div>
-                    <div style={{ width: '36px', height: '20px', borderRadius: '10px', background: '#1e293b', position: 'relative', cursor: 'pointer' }}>
-                        <div style={{ position: 'absolute', top: '3px', left: '3px', width: '14px', height: '14px', borderRadius: '50%', background: '#475569' }} />
-                    </div>
-                </div>
-            </div>
+
 
             {/* ── Construtor de Estratégias (Filtros de Confluência) ── */}
             <div style={{
