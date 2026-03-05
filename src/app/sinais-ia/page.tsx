@@ -267,6 +267,47 @@ export default function SinaisIA() {
 
     useEffect(() => { setFavorites(getFavorites()); }, []);
 
+    // ── Hidratar Trades Abertos (Proteção contra F5) ─────────────────────────
+    useEffect(() => {
+        const hydrateTrades = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('trading_history')
+                    .select('*')
+                    .eq('resultado', 'ABERTO');
+
+                if (error || !data) return;
+
+                const hydrated: ActiveTrade[] = data.map(row => ({
+                    id: `${row.ativo}_${row.sinal_ia}_M5`,
+                    asset: String(row.ativo),
+                    direction: row.sinal_ia as 'COMPRA' | 'VENDA',
+                    entryRaw: Number(row.entry_price),
+                    stopLossRaw: Number(row.stop_loss),
+                    takeProfit1Raw: Number(row.take_profit_1),
+                    takeProfit2Raw: Number(row.take_profit_2),
+                    takeProfit3Raw: Number(row.take_profit_3),
+                    takeProfitRaw: Number(row.take_profit),
+                    openTime: new Date(String(row.open_time)),
+                    stars: 3, // Defaults para hidratado do F5
+                    status: 'ACOMPANHANDO',
+                    supabaseId: String(row.id),
+                    maxTargetReached: Number(row.max_target || 0),
+                }));
+
+                if (hydrated.length > 0) {
+                    setActiveTrades(hydrated);
+                    hydrated.forEach(t => {
+                        prevSignals.current[t.asset] = t.direction;
+                    });
+                }
+            } catch (err) {
+                console.error('[Radar] Falha ao hidratar trades:', err);
+            }
+        };
+        hydrateTrades();
+    }, []);
+
     // ── Sincronização do Toggle com o Supabase ───────────────────────────────
     useEffect(() => {
         (async () => {
@@ -508,27 +549,39 @@ export default function SinaisIA() {
             }
 
             // ── Registrar novo trade ao detectar mudança de sinal ────────────
+            const uniqueTradeId = `${fav.value}_${direction}_M5`;
+
             if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
-                const newTrade: ActiveTrade = {
-                    id: `${fav.value}-${Date.now()}`,
-                    asset: fav.value,
-                    direction: direction as 'COMPRA' | 'VENDA',
-                    entryRaw,
-                    stopLossRaw,
-                    takeProfit1Raw,
-                    takeProfit2Raw,
-                    takeProfit3Raw,
-                    takeProfitRaw,
-                    openTime: new Date(),
-                    stars,
-                    status: 'ACOMPANHANDO',
-                };
-                // Persiste abertura no Supabase e salva o UUID retornado
-                openTradeInSupabase(newTrade).then(supabaseId => {
-                    setActiveTrades(prev => [
-                        { ...newTrade, supabaseId },
-                        ...prev.slice(0, 19)
-                    ]);
+                setActiveTrades(prev => {
+                    // Previne duplicatas caso o trade já exista e esteja ativo
+                    if (prev.some(t => t.id === uniqueTradeId && t.status === 'ACOMPANHANDO')) {
+                        return prev;
+                    }
+
+                    const newTrade: ActiveTrade = {
+                        id: uniqueTradeId,
+                        asset: fav.value,
+                        direction: direction as 'COMPRA' | 'VENDA',
+                        entryRaw,
+                        stopLossRaw,
+                        takeProfit1Raw,
+                        takeProfit2Raw,
+                        takeProfit3Raw,
+                        takeProfitRaw,
+                        openTime: new Date(),
+                        stars,
+                        status: 'ACOMPANHANDO',
+                    };
+
+                    // Persiste abertura no Supabase e salva o UUID retornado
+                    openTradeInSupabase(newTrade).then(supabaseId => {
+                        setActiveTrades(current => [
+                            { ...newTrade, supabaseId },
+                            ...current.filter(t => t.id !== uniqueTradeId).slice(0, 19)
+                        ]);
+                    });
+
+                    return [newTrade, ...prev].slice(0, 19);
                 });
             }
 
@@ -813,10 +866,23 @@ export default function SinaisIA() {
                                             </span>
                                         )}
 
-                                        {/* Horário atualização */}
-                                        <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#334155' }}>
-                                            {item.lastUpdate?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'}
-                                        </span>
+                                        {/* Horário atualização / Gerado */}
+                                        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                                            {(() => {
+                                                const at = activeTrades.find(t => t.asset === item.asset.value && t.status === 'ACOMPANHANDO');
+                                                if (at) {
+                                                    return (
+                                                        <>
+                                                            <div style={{ fontSize: '10px', color: '#00e5ff', fontWeight: 700 }}>⏱ Gerado {at.openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                                            <div style={{ fontSize: '9px', color: '#64748b' }}>Sinal em andamento...</div>
+                                                        </>
+                                                    );
+                                                }
+                                                return <span style={{ fontSize: '10px', color: '#334155' }}>
+                                                    {item.lastUpdate?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'}
+                                                </span>;
+                                            })()}
+                                        </div>
 
                                         {/* Botão de Recarregar individual — aparece só quando há erro */}
                                         {item.error && !item.loading && (
