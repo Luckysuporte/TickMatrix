@@ -14,14 +14,6 @@ export default function Home() {
           </h1>
           <p className="text-slate-400 text-sm">O que você deseja analisar hoje?</p>
         </div>
-
-        <button className="flex items-center gap-2 bg-[#ffcc00] hover:bg-[#ffb300] text-black px-4 py-2 rounded-xl text-sm font-bold transition-colors">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 5V19L19 12L8 5Z" />
-          </svg>
-          VORTEX ACADEMY
-          <span className="bg-black/10 text-black/80 text-[10px] px-1.5 py-0.5 rounded-md ml-1 -mt-2">0/8</span>
-        </button>
       </div>
 
       {/* Main Action Grid */}
