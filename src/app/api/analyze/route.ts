@@ -117,6 +117,8 @@ function computeSignal(
     change: number;
     high: number;
     low: number;
+    currentHigh: number;
+    currentLow: number;
 } {
     const closes = candles.map(c => c.close);
     const highs = candles.map(c => c.high);
@@ -125,6 +127,8 @@ function computeSignal(
     const price = closes[closes.length - 1];
     const high = Math.max(...closes.slice(-20));
     const low = Math.min(...closes.slice(-20));
+    const currentHigh = highs[highs.length - 1];
+    const currentLow = lows[lows.length - 1];
     const change = ((price - closes[closes.length - 2]) / closes[closes.length - 2]) * 100;
 
     // SMA 20
@@ -234,7 +238,7 @@ function computeSignal(
     if ((signal === 'COMPRA' && trend === 'ALTA') || (signal === 'VENDA' && trend === 'BAIXA')) factors++;
     const confluencia = `${factors}/3`;
 
-    return { signal, signalStrength, price, sma20, rsi14, entry, stopLoss, takeProfit1, takeProfit2, takeProfit3, riskReward: riskRewardString, trend, confluencia, change, high, low };
+    return { signal, signalStrength, price, sma20, rsi14, entry, stopLoss, takeProfit1, takeProfit2, takeProfit3, riskReward: riskRewardString, trend, confluencia, change, high, low, currentHigh, currentLow };
 }
 
 
@@ -293,6 +297,8 @@ export async function POST(req: NextRequest) {
             change: result.change.toFixed(2),
             high: f(result.high),
             low: f(result.low),
+            currentHigh: result.currentHigh,
+            currentLow: result.currentLow,
             entry: f(result.entry),
             stopLoss: f(result.stopLoss),
             takeProfit1: f(result.takeProfit1),
