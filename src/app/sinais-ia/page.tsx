@@ -189,6 +189,7 @@ export default function SinaisIA() {
     const [countdown, setCountdown] = useState(120);
     const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
     const [historico, setHistorico] = useState<Record<string, unknown>[]>([]);
+    const [showHistorico, setShowHistorico] = useState(true);
     const [loadingHistorico, setLoadingHistorico] = useState(false);
     const prevSignals = useRef<Record<string, string>>({});
     const signalTimes = useRef<Record<string, Date>>({}); // Birth time of the current signal
@@ -1071,7 +1072,7 @@ export default function SinaisIA() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {activeTrades.map((trade, i) => {
+                                {activeTrades.filter(t => t.asset !== 'TESTE_TI').map((trade, i) => {
                                     const isOpen = trade.status === 'ACOMPANHANDO';
                                     const isGain = trade.status === 'GAIN';
                                     const accentColor = isOpen ? '#00e5ff' : isGain ? '#00e676' : '#ef4444';
@@ -1115,403 +1116,406 @@ export default function SinaisIA() {
                         </table>
                     </div>
                 </div>
+            )}
+
+            {/* ERROR BANNER DE INSERÇÃO */}
+            {
+                insertError && (
+                    <div style={{
+                        background: 'rgba(239, 68, 68, 0.15)', border: '2px solid #ef4444',
+                        padding: '16px 24px', borderRadius: '12px', marginBottom: '16px',
+                        display: 'flex', flexDirection: 'column', gap: '8px',
+                        boxShadow: '0 0 24px rgba(239, 68, 68, 0.4)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <strong style={{ color: '#fca5a5', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <AlertTriangle style={{ width: '18px', height: '18px' }} /> FALHA CRÍTICA DE GRAVAÇÃO NO HISTÓRICO
+                            </strong>
+                            <button onClick={() => setInsertError(null)} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}>
+                                <X style={{ width: '16px', height: '16px' }} />
+                            </button>
+                        </div>
+                        <pre style={{ margin: 0, padding: '12px', background: '#000', borderRadius: '8px', color: '#f87171', fontSize: '11px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                            {insertError}
+                        </pre>
+                    </div>
+                )
+            }
+
+            {/* ── Header Sinais IA ── */}
+            <div style={{ background: '#0d1117', border: '1px solid rgba(0,229,255,0.08)', borderBottom: 'none', borderRadius: '16px 16px 0 0', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                    <h2 style={{ fontSize: '15px', fontWeight: 800, color: '#00e5ff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                        <Zap style={{ width: '16px', height: '16px' }} />
+                        Sinais IA em Tempo Real
+                    </h2>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0' }}>Sinais de trading gerados por IA com alta confiança</p>
                 </div>
-    )
-}
-
-{/* ERROR BANNER DE INSERÇÃO */ }
-{
-    insertError && (
-        <div style={{
-            background: 'rgba(239, 68, 68, 0.15)', border: '2px solid #ef4444',
-            padding: '16px 24px', borderRadius: '12px', marginBottom: '16px',
-            display: 'flex', flexDirection: 'column', gap: '8px',
-            boxShadow: '0 0 24px rgba(239, 68, 68, 0.4)'
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <strong style={{ color: '#fca5a5', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle style={{ width: '18px', height: '18px' }} /> FALHA CRÍTICA DE GRAVAÇÃO NO HISTÓRICO
-                </strong>
-                <button onClick={() => setInsertError(null)} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}>
-                    <X style={{ width: '16px', height: '16px' }} />
-                </button>
-            </div>
-            <pre style={{ margin: 0, padding: '12px', background: '#000', borderRadius: '8px', color: '#f87171', fontSize: '11px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                {insertError}
-            </pre>
-        </div>
-    )
-}
-
-{/* ── Header Sinais IA ── */ }
-<div style={{ background: '#0d1117', border: '1px solid rgba(0,229,255,0.08)', borderBottom: 'none', borderRadius: '16px 16px 0 0', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-    <div>
-        <h2 style={{ fontSize: '15px', fontWeight: 800, color: '#00e5ff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-            <Zap style={{ width: '16px', height: '16px' }} />
-            Sinais IA em Tempo Real
-        </h2>
-        <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0' }}>Sinais de trading gerados por IA com alta confiança</p>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {/* Botão Histórico de Hoje */}
-        <button
-            onClick={() => setShowHistorico(v => !v)}
-            style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
-                border: `1px solid ${showHistorico ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                background: showHistorico ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)',
-                color: showHistorico ? '#fbbf24' : '#64748b',
-                fontSize: '11px', fontWeight: 700,
-            }}
-        >
-            <RefreshCw
-                onClick={e => { e.stopPropagation(); if (showHistorico) fetchHistorico(); }}
-                style={{ width: '12px', height: '12px', cursor: 'pointer' }}
-            />
-            Histórico de Hoje
-        </button>
-        {/* Botão Filtro Sniper */}
-        <button
-            onClick={() => setFilterOpen(true)}
-            title="Filtrar Ativos (Modo Sniper)"
-            style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
-                border: '1px solid rgba(0,229,255,0.25)',
-                background: selectedSignalAssets.length < ALL_SNIPER_VALUES.length
-                    ? 'rgba(0,229,255,0.12)'
-                    : 'rgba(255,255,255,0.04)',
-                color: selectedSignalAssets.length < ALL_SNIPER_VALUES.length ? '#00e5ff' : '#64748b',
-                fontSize: '11px', fontWeight: 700, transition: 'all 0.2s',
-            }}
-        >
-            <Settings style={{ width: '13px', height: '13px' }} />
-            Sniper
-            <span style={{
-                background: 'rgba(0,229,255,0.2)', color: '#00e5ff',
-                fontSize: '10px', fontWeight: 900, padding: '1px 6px',
-                borderRadius: '10px', minWidth: '18px', textAlign: 'center',
-            }}>
-                {selectedSignalAssets.length}/{ALL_SNIPER_VALUES.length}
-            </span>
-        </button>
-        {/* Toggle Ativo/Inativo */}
-        <span style={{ fontSize: '12px', color: togglingRadar ? '#334155' : active ? '#00e5ff' : '#475569', fontWeight: 700, transition: 'color 0.2s' }}>
-            {togglingRadar ? 'Salvando...' : active ? 'Ativo' : 'Inativo'}
-        </span>
-        <div
-            onClick={toggleRadarActive}
-            title={togglingRadar ? 'Aguarde...' : active ? 'Desativar Radar' : 'Ativar Radar'}
-            style={{
-                width: '44px', height: '24px', borderRadius: '12px', position: 'relative',
-                cursor: togglingRadar ? 'wait' : 'pointer',
-                transition: 'background 0.2s, opacity 0.2s',
-                background: active ? '#00e5ff' : '#1e293b',
-                opacity: togglingRadar ? 0.55 : 1,
-                pointerEvents: togglingRadar ? 'none' : 'auto',
-            }}
-        >
-            <div style={{
-                position: 'absolute', top: '3px', left: active ? '23px' : '3px',
-                width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
-                transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)'
-            }} />
-        </div>
-    </div>
-</div>
-
-{/* ══ HISTÓRICO DE HOJE ══ */ }
-{
-    showHistorico && (
-        <div style={{ border: '1px solid rgba(251,191,36,0.15)', background: '#07090f', borderRadius: 0 }}>
-            <div style={{
-                padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    📅 Histórico de Hoje
-                    {loadingHistorico && <RefreshCw style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
-                    <span style={{ fontSize: '10px', color: '#475569', fontWeight: 400 }}>
-                        {historico.length} registros
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Botão Histórico de Hoje */}
+                    <button
+                        onClick={() => setShowHistorico(v => !v)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
+                            border: `1px solid ${showHistorico ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            background: showHistorico ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)',
+                            color: showHistorico ? '#fbbf24' : '#64748b',
+                            fontSize: '11px', fontWeight: 700,
+                        }}
+                    >
+                        <RefreshCw
+                            onClick={e => { e.stopPropagation(); if (showHistorico) fetchHistorico(); }}
+                            style={{ width: '12px', height: '12px', cursor: 'pointer' }}
+                        />
+                        Histórico de Hoje
+                    </button>
+                    {/* Botão Filtro Sniper */}
+                    <button
+                        onClick={() => setFilterOpen(true)}
+                        title="Filtrar Ativos (Modo Sniper)"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
+                            border: '1px solid rgba(0,229,255,0.25)',
+                            background: selectedSignalAssets.length < ALL_SNIPER_VALUES.length
+                                ? 'rgba(0,229,255,0.12)'
+                                : 'rgba(255,255,255,0.04)',
+                            color: selectedSignalAssets.length < ALL_SNIPER_VALUES.length ? '#00e5ff' : '#64748b',
+                            fontSize: '11px', fontWeight: 700, transition: 'all 0.2s',
+                        }}
+                    >
+                        <Settings style={{ width: '13px', height: '13px' }} />
+                        Sniper
+                        <span style={{
+                            background: 'rgba(0,229,255,0.2)', color: '#00e5ff',
+                            fontSize: '10px', fontWeight: 900, padding: '1px 6px',
+                            borderRadius: '10px', minWidth: '18px', textAlign: 'center',
+                        }}>
+                            {selectedSignalAssets.length}/{ALL_SNIPER_VALUES.length}
+                        </span>
+                    </button>
+                    {/* Toggle Ativo/Inativo */}
+                    <span style={{ fontSize: '12px', color: togglingRadar ? '#334155' : active ? '#00e5ff' : '#475569', fontWeight: 700, transition: 'color 0.2s' }}>
+                        {togglingRadar ? 'Salvando...' : active ? 'Ativo' : 'Inativo'}
                     </span>
-                </span>
-                <button onClick={fetchHistorico} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#64748b', fontSize: '10px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <RefreshCw style={{ width: '10px', height: '10px' }} /> Atualizar
-                </button>
-            </div>
-
-            {historico.length === 0 && !loadingHistorico && (
-                <div style={{ padding: '24px', textAlign: 'center', color: '#334155', fontSize: '12px' }}>
-                    Nenhum sinal registrado hoje.
+                    <div
+                        onClick={toggleRadarActive}
+                        title={togglingRadar ? 'Aguarde...' : active ? 'Desativar Radar' : 'Ativar Radar'}
+                        style={{
+                            width: '44px', height: '24px', borderRadius: '12px', position: 'relative',
+                            cursor: togglingRadar ? 'wait' : 'pointer',
+                            transition: 'background 0.2s, opacity 0.2s',
+                            background: active ? '#00e5ff' : '#1e293b',
+                            opacity: togglingRadar ? 0.55 : 1,
+                            pointerEvents: togglingRadar ? 'none' : 'auto',
+                        }}
+                    >
+                        <div style={{
+                            position: 'absolute', top: '3px', left: active ? '23px' : '3px',
+                            width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+                            transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.5)'
+                        }} />
+                    </div>
                 </div>
-            )}
+            </div>
 
-            {historico.length > 0 && (
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-                        <thead>
-                            <tr style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                {['Horário', 'Ativo', 'Direção', 'Entrada', 'Atraso', 'Resultado', 'Pontos'].map(h => (
-                                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {historico.map((row, i) => {
-                                const r = row as Record<string, unknown>;
-                                const res = String(r.resultado ?? '');
-                                const isGain = res === 'GAIN';
-                                const isStop = res === 'STOP';
-                                const isAberto = res === 'ABERTO';
-                                const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
-                                const fmt = (v: unknown) => v != null ? Number(v).toFixed(v > 100 ? 2 : 4) : '—';
-                                const timeStr = r.open_time
-                                    ? new Date(String(r.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                                    : '—';
+            {/* ══ HISTÓRICO DE HOJE ══ */}
+            {
+                showHistorico && (
+                    <div style={{ border: '1px solid rgba(251,191,36,0.15)', background: '#07090f', borderRadius: 0 }}>
+                        <div style={{
+                            padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                📅 Histórico de Hoje
+                                {loadingHistorico && <RefreshCw style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
+                                <span style={{ fontSize: '10px', color: '#475569', fontWeight: 400 }}>
+                                    {historico.length} registros
+                                </span>
+                            </span>
+                            <button onClick={fetchHistorico} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#64748b', fontSize: '10px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <RefreshCw style={{ width: '10px', height: '10px' }} /> Atualizar
+                            </button>
+                        </div>
 
-                                // Cálculo de delay
-                                let delayMin = 0;
-                                if (r.signal_time && r.execution_time) {
-                                    const sT = new Date(String(r.signal_time)).getTime();
-                                    const eT = new Date(String(r.execution_time)).getTime();
-                                    delayMin = Math.round((eT - sT) / 60000);
-                                }
+                        {historico.length === 0 && !loadingHistorico && (
+                            <div style={{ padding: '24px', textAlign: 'center', color: '#334155', fontSize: '12px' }}>
+                                Nenhum sinal registrado hoje.
+                            </div>
+                        )}
 
-                                return (
-                                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#64748b', whiteSpace: 'nowrap' }}>⏱ {timeStr}</td>
-                                        <td style={{ padding: '8px 12px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{String(r.ativo ?? '')}</span>
-                                                {r.stars_at_entry && (
-                                                    <span style={{ fontSize: '10px', color: '#f59e0b' }}>
-                                                        {'★'.repeat(Number(r.stars_at_entry))}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '8px 12px', fontWeight: 800, color: String(r.sinal_ia) === 'COMPRA' ? '#00e676' : '#ef4444' }}>{String(r.sinal_ia ?? '')}</td>
-                                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#94a3b8' }}>{fmt(r.entry_price)}</td>
-                                        <td style={{ padding: '8px 12px' }}>
-                                            <span style={{ fontSize: '10px', color: delayMin > 5 ? '#ef4444' : '#64748b', fontWeight: 700 }}>
-                                                +{delayMin}m
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '8px 12px' }}>
-                                            <span style={{
-                                                fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px',
-                                                background: `${resColor}18`, color: resColor, border: `1px solid ${resColor}30`,
-                                            }}>
-                                                {isGain ? '🏆 GAIN' : isStop ? '🛑 STOP' : isAberto ? '● Em andamento' : res}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
-                                            {r.pontos != null ? `${Number(r.pontos) >= 0 ? '+' : ''}${Number(r.pontos).toFixed(2)} pts` : '—'}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                        {historico.length > 0 && (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                    <thead>
+                                        <tr style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                            {['Horário', 'Ativo', 'Direção', 'Entrada', 'Atraso', 'Resultado', 'Pontos'].map(h => (
+                                                <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {historico.filter(r => r.ativo !== 'TESTE_TI').map((row, i) => {
+                                            const r = row as Record<string, unknown>;
+                                            const res = String(r.resultado ?? '');
+                                            const isGain = res === 'GAIN';
+                                            const isStop = res === 'STOP';
+                                            const isAberto = res === 'ABERTO';
+                                            const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
+                                            const fmt = (v: unknown) => v != null ? Number(v).toFixed(Number(v) > 100 ? 2 : 4) : '—';
+                                            const timeStr = r.open_time
+                                                ? new Date(String(r.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                                                : '—';
+
+                                            // Cálculo de delay
+                                            let delayStr = '—';
+                                            let delaySecs = 0;
+                                            if (r.signal_time && r.execution_time) {
+                                                const sT = new Date(String(r.signal_time)).getTime();
+                                                const eT = new Date(String(r.execution_time)).getTime();
+                                                const diffMs = Math.max(0, eT - sT);
+                                                delaySecs = diffMs / 1000;
+                                                const m = Math.floor(delaySecs / 60);
+                                                const s = Math.floor(delaySecs % 60);
+                                                delayStr = `+${m}m ${s}s`;
+                                            }
+
+                                            return (
+                                                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                                                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#64748b', whiteSpace: 'nowrap' }}>⏱ {timeStr}</td>
+                                                    <td style={{ padding: '8px 12px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{String(r.ativo ?? '')}</span>
+                                                            {Number(r.stars_at_entry) > 0 && (
+                                                                <span style={{ fontSize: '10px', color: '#f59e0b' }}>
+                                                                    {'★'.repeat(Number(r.stars_at_entry))}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '8px 12px', fontWeight: 800, color: String(r.sinal_ia) === 'COMPRA' ? '#00e676' : '#ef4444' }}>{String(r.sinal_ia ?? '')}</td>
+                                                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#94a3b8' }}>{fmt(r.entry_price ?? r.preco)}</td>
+                                                    <td style={{ padding: '8px 12px' }}>
+                                                        <span style={{ fontSize: '10px', color: delaySecs > 300 ? '#ef4444' : '#64748b', fontWeight: 700 }}>
+                                                            Delay: {delayStr}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 12px' }}>
+                                                        <span style={{
+                                                            fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px',
+                                                            background: `${resColor}18`, color: resColor, border: `1px solid ${resColor}30`,
+                                                        }}>
+                                                            {isGain ? '🏆 GAIN' : isStop ? '🛑 STOP' : isAberto ? '● Em andamento' : res}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
+                                                        {r.pontos != null ? `${Number(r.pontos) >= 0 ? '+' : ''}${Number(r.pontos).toFixed(2)} pts` : '—'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )
+            }
+
+
+
+            {/* ── Construtor de Estratégias (Filtros de Confluência) ── */}
+            <div style={{
+                background: '#0a0f16', border: '1px solid rgba(0,229,255,0.06)',
+                padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>Construtor de Estratégias</span>
                 </div>
-            )}
-        </div>
-    )
-}
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+                    {/* SuperTrend */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.supertrend ? '#00e5ff' : '#64748b', fontWeight: 700 }}>SuperTrend (ATR)</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, supertrend: !prev.supertrend }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.supertrend ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.supertrend ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
 
+                    {/* RSI */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.rsi ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Força Relativa (RSI)</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, rsi: !prev.rsi }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.rsi ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.rsi ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
 
-{/* ── Construtor de Estratégias (Filtros de Confluência) ── */ }
-<div style={{
-    background: '#0a0f16', border: '1px solid rgba(0,229,255,0.06)',
-    padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
-}}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
-        <span style={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>Construtor de Estratégias</span>
-    </div>
+                    {/* MACD */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.macd ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Cruzamento MACD</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, macd: !prev.macd }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.macd ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.macd ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
 
-    <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
-        {/* SuperTrend */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: activeFilters.supertrend ? '#00e5ff' : '#64748b', fontWeight: 700 }}>SuperTrend (ATR)</span>
-            <div
-                onClick={() => setActiveFilters(prev => ({ ...prev, supertrend: !prev.supertrend }))}
-                style={{
-                    width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                    background: activeFilters.supertrend ? '#00e5ff' : '#1e293b'
-                }}
-            >
-                <div style={{
-                    position: 'absolute', top: '2px', left: activeFilters.supertrend ? '16px' : '2px',
-                    width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                }} />
-            </div>
-        </div>
-
-        {/* RSI */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: activeFilters.rsi ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Força Relativa (RSI)</span>
-            <div
-                onClick={() => setActiveFilters(prev => ({ ...prev, rsi: !prev.rsi }))}
-                style={{
-                    width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                    background: activeFilters.rsi ? '#00e5ff' : '#1e293b'
-                }}
-            >
-                <div style={{
-                    position: 'absolute', top: '2px', left: activeFilters.rsi ? '16px' : '2px',
-                    width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                }} />
-            </div>
-        </div>
-
-        {/* MACD */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: activeFilters.macd ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Cruzamento MACD</span>
-            <div
-                onClick={() => setActiveFilters(prev => ({ ...prev, macd: !prev.macd }))}
-                style={{
-                    width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                    background: activeFilters.macd ? '#00e5ff' : '#1e293b'
-                }}
-            >
-                <div style={{
-                    position: 'absolute', top: '2px', left: activeFilters.macd ? '16px' : '2px',
-                    width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                }} />
-            </div>
-        </div>
-
-        {/* EMAs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: activeFilters.emas ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Alinhamento de Médias</span>
-            <div
-                onClick={() => setActiveFilters(prev => ({ ...prev, emas: !prev.emas }))}
-                style={{
-                    width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                    background: activeFilters.emas ? '#00e5ff' : '#1e293b'
-                }}
-            >
-                <div style={{
-                    position: 'absolute', top: '2px', left: activeFilters.emas ? '16px' : '2px',
-                    width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                }} />
-            </div>
-        </div>
-    </div>
-</div>
-
-{/* ── Dashboard de Gestão de Risco (Risk Management) ── */ }
-<div style={{
-    background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)',
-    borderTop: 'none', padding: '16px 24px', display: 'flex', flexWrap: 'wrap', gap: '20px'
-}}>
-    <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-        <ShieldCheck style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
-        <span style={{ fontSize: '13px', fontWeight: 800, color: '#e2e8f0' }}>Gestão de Risco da Conta</span>
-    </div>
-
-    {/* Saldo da Conta */}
-    <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Saldo da Conta ($)</label>
-        <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>$</span>
-            <input
-                type="number"
-                value={accountBalance}
-                onChange={(e) => setAccountBalance(Number(e.target.value))}
-                style={{
-                    width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#fff', fontSize: '13px',
-                    outline: 'none'
-                }}
-            />
-        </div>
-    </div>
-
-    {/* Risco Máximo */}
-    <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Risco por Operação (%)</label>
-        <div style={{ position: 'relative' }}>
-            <input
-                type="number" step="0.1"
-                value={riskPercentage}
-                onChange={(e) => setRiskPercentage(Number(e.target.value))}
-                style={{
-                    width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px', padding: '8px 24px 8px 12px', color: '#fff', fontSize: '13px',
-                    outline: 'none'
-                }}
-            />
-            <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>%</span>
-        </div>
-    </div>
-
-    {/* Limite de Perda Diária */}
-    <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Daily Drawdown Limit</label>
-        <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#f87171', fontSize: '13px' }}>$</span>
-            <input
-                type="number"
-                value={dailyDrawdown}
-                onChange={(e) => setDailyDrawdown(Number(e.target.value))}
-                style={{
-                    width: '100%', background: '#0a0f16', border: '1px solid rgba(248,113,113,0.2)',
-                    borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#f87171', fontSize: '13px',
-                    outline: 'none'
-                }}
-            />
-        </div>
-    </div>
-
-</div>
-
-{/* ── Sinais Ativos ── */ }
-<div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
-    <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <span style={{ fontSize: '13px', fontWeight: 700, color: '#00e5ff', display: 'flex', alignItems: 'center', gap: '7px' }}>
-            <Zap style={{ width: '14px', height: '14px' }} /> Sinais Ativos (2)
-        </span>
-        <span style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Lock style={{ width: '12px', height: '12px' }} /> Bloqueado
-        </span>
-    </div>
-    {[0].map(i => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px', background: 'rgba(0,230,118,0.04)', padding: '22px 24px', borderBottom: '1px solid rgba(255,255,255,0.03)', backdropFilter: 'blur(2px)', position: 'relative' }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(13,17,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid #00e676', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                    <Crown style={{ width: '14px', height: '14px', color: '#00e676' }} />
+                    {/* EMAs */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: activeFilters.emas ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Alinhamento de Médias</span>
+                        <div
+                            onClick={() => setActiveFilters(prev => ({ ...prev, emas: !prev.emas }))}
+                            style={{
+                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                background: activeFilters.emas ? '#00e5ff' : '#1e293b'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', top: '2px', left: activeFilters.emas ? '16px' : '2px',
+                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
+                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+                            }} />
+                        </div>
+                    </div>
                 </div>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: '#00e676', margin: 0 }}>Oportunidade de Lucro</p>
-                <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>Ative uma assinatura para desbloquear</p>
             </div>
-            <div style={{ width: '100%', height: '32px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)' }} />
-        </div>
-    ))}
-</div>
 
-{/* ── Sinais Recentes ── */ }
-<div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)', borderRadius: '0 0 16px 16px' }}>
-    <div style={{ padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '7px' }}>
-            <Zap style={{ width: '14px', height: '14px', color: '#ff9900' }} /> Sinais Recentes
-        </span>
-    </div>
-    {historico.length === 0 ? (
-        /* ── Empty State ─────────────────────────────────────────── */
-        <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', padding: '40px 24px', gap: '14px',
-        }}>
-            {/* Ícone de radar animado */}
-            <style>{`
+            {/* ── Dashboard de Gestão de Risco (Risk Management) ── */}
+            <div style={{
+                background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)',
+                borderTop: 'none', padding: '16px 24px', display: 'flex', flexWrap: 'wrap', gap: '20px'
+            }}>
+                <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <ShieldCheck style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#e2e8f0' }}>Gestão de Risco da Conta</span>
+                </div>
+
+                {/* Saldo da Conta */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Saldo da Conta ($)</label>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>$</span>
+                        <input
+                            type="number"
+                            value={accountBalance}
+                            onChange={(e) => setAccountBalance(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#fff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* Risco Máximo */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Risco por Operação (%)</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="number" step="0.1"
+                            value={riskPercentage}
+                            onChange={(e) => setRiskPercentage(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 24px 8px 12px', color: '#fff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                        <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>%</span>
+                    </div>
+                </div>
+
+                {/* Limite de Perda Diária */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Daily Drawdown Limit</label>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#f87171', fontSize: '13px' }}>$</span>
+                        <input
+                            type="number"
+                            value={dailyDrawdown}
+                            onChange={(e) => setDailyDrawdown(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(248,113,113,0.2)',
+                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#f87171', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+            </div>
+
+            {/* ── Sinais Ativos ── */}
+            <div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
+                <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#00e5ff', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <Zap style={{ width: '14px', height: '14px' }} /> Sinais Ativos (2)
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Lock style={{ width: '12px', height: '12px' }} /> Bloqueado
+                    </span>
+                </div>
+                {[0].map(i => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px', background: 'rgba(0,230,118,0.04)', padding: '22px 24px', borderBottom: '1px solid rgba(255,255,255,0.03)', backdropFilter: 'blur(2px)', position: 'relative' }}>
+                        <div style={{ position: 'absolute', inset: 0, background: 'rgba(13,17,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid #00e676', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+                                <Crown style={{ width: '14px', height: '14px', color: '#00e676' }} />
+                            </div>
+                            <p style={{ fontSize: '13px', fontWeight: 700, color: '#00e676', margin: 0 }}>Oportunidade de Lucro</p>
+                            <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>Ative uma assinatura para desbloquear</p>
+                        </div>
+                        <div style={{ width: '100%', height: '32px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)' }} />
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Sinais Recentes ── */}
+            <div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)', borderRadius: '0 0 16px 16px' }}>
+                <div style={{ padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <Zap style={{ width: '14px', height: '14px', color: '#ff9900' }} /> Sinais Recentes
+                    </span>
+                </div>
+                {historico.length === 0 ? (
+                    /* ── Empty State ─────────────────────────────────────────── */
+                    <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        justifyContent: 'center', padding: '40px 24px', gap: '14px',
+                    }}>
+                        {/* Ícone de radar animado */}
+                        <style>{`
                             @keyframes radarSpin {
                                 0%   { transform: rotate(0deg);   opacity: 1; }
                                 50%  { transform: rotate(180deg); opacity: 0.5; }
@@ -1522,352 +1526,352 @@ export default function SinaisIA() {
                                 50%       { transform: scale(1.6); opacity: 0; }
                             }
                         `}</style>
-            <div style={{ position: 'relative', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {/* Anel pulsante */}
-                <div style={{
-                    position: 'absolute', inset: 0, borderRadius: '50%',
-                    border: '2px solid rgba(0,229,255,0.35)',
-                    animation: 'radarPing 2.2s ease-in-out infinite',
-                }} />
-                {/* Ícone principal */}
-                <div style={{
-                    width: '44px', height: '44px', borderRadius: '50%',
-                    background: 'rgba(0,229,255,0.07)',
-                    border: '1px solid rgba(0,229,255,0.2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                    <Radio
-                        style={{
-                            width: '20px', height: '20px', color: '#00e5ff',
-                            animation: 'radarSpin 3s linear infinite',
-                        }}
-                    />
-                </div>
-            </div>
-            {/* Textos */}
-            <div style={{ textAlign: 'center' }}>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', margin: '0 0 6px' }}>
-                    Acompanhando mercado...
-                </p>
-                <p style={{ fontSize: '11px', color: '#334155', margin: '0 0 10px', letterSpacing: '0.02em' }}>
-                    Nenhum sinal registrado hoje ainda.
-                </p>
-            </div>
-        </div>
-    ) : (
-        historico.slice(0, 5).map((row, i) => {
-            const sig = row as Record<string, unknown>;
-            const res = String(sig.resultado ?? '');
-            const maxT = Number(sig.max_target ?? 0);
-
-            const isGain = res === 'GAIN';
-            const isStop = res === 'STOP';
-            const isAberto = res === 'ABERTO';
-            const isBreakeven = res === 'BREAKEVEN';
-
-            const dir = String(sig.sinal_ia ?? 'COMPRA');
-            const isBuy = dir === 'COMPRA';
-            const asset = String(sig.ativo ?? '???');
-            const entry = Number(sig.entry_price ?? 0);
-            const sl = Number(sig.stop_loss ?? 0);
-            const tp1 = Number(sig.take_profit_1 ?? 0);
-            const tp2 = Number(sig.take_profit_2 ?? 0);
-            const tp3 = Number(sig.take_profit_3 ?? 0);
-
-            const timeStr = sig.open_time
-                ? new Date(String(sig.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                : '—';
-
-            const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
-
-            // Badge logic
-            let badgeText = 'Acompanhando';
-            let badgeColor = '#00e5ff';
-            if (isGain) { badgeText = 'Gain (Alvo 3)'; badgeColor = '#00e676'; }
-            else if (isBreakeven) { badgeText = `Breakeven (Pós Alvo ${maxT})`; badgeColor = '#94a3b8'; }
-            else if (isStop) { badgeText = 'Stop Loss'; badgeColor = '#ef4444'; }
-
-            // Background row color
-            const bgCol = isGain ? 'rgba(0,230,118,0.04)' : isStop ? 'rgba(239,68,68,0.04)' : isBreakeven ? 'rgba(148,163,184,0.03)' : 'transparent';
-
-            return (
-                <div key={String(sig.id)} style={{ padding: '16px 24px', background: bgCol, borderBottom: i < historico.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'default' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {isBuy ? <TrendingUp style={{ width: '16px', height: '16px', color: '#00e676' }} /> : <TrendingDown style={{ width: '16px', height: '16px', color: '#ef4444' }} />}
-                            <span style={{ fontSize: '15px', fontWeight: 800, color: '#fff' }}>{asset}</span>
-                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${badgeColor}20`, color: badgeColor, border: `1px solid ${badgeColor}30` }}>
-                                {badgeText}
-                            </span>
+                        <div style={{ position: 'relative', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {/* Anel pulsante */}
+                            <div style={{
+                                position: 'absolute', inset: 0, borderRadius: '50%',
+                                border: '2px solid rgba(0,229,255,0.35)',
+                                animation: 'radarPing 2.2s ease-in-out infinite',
+                            }} />
+                            {/* Ícone principal */}
+                            <div style={{
+                                width: '44px', height: '44px', borderRadius: '50%',
+                                background: 'rgba(0,229,255,0.07)',
+                                border: '1px solid rgba(0,229,255,0.2)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <Radio
+                                    style={{
+                                        width: '20px', height: '20px', color: '#00e5ff',
+                                        animation: 'radarSpin 3s linear infinite',
+                                    }}
+                                />
+                            </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
-                            <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
-                                {sig.pontos != null ? `${Number(sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.pontos))} pts` : '—'}
+                        {/* Textos */}
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', margin: '0 0 6px' }}>
+                                Acompanhando mercado...
+                            </p>
+                            <p style={{ fontSize: '11px', color: '#334155', margin: '0 0 10px', letterSpacing: '0.02em' }}>
+                                Nenhum sinal registrado hoje ainda.
                             </p>
                         </div>
                     </div>
+                ) : (
+                    historico.filter(r => r.ativo !== 'TESTE_TI').slice(0, 5).map((row, i) => {
+                        const sig = row as Record<string, unknown>;
+                        const res = String(sig.resultado ?? '');
+                        const maxT = Number(sig.max_target ?? 0);
 
-                    {/* Auditoria de Alvos (Horizontal) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        const isGain = res === 'GAIN';
+                        const isStop = res === 'STOP';
+                        const isAberto = res === 'ABERTO';
+                        const isBreakeven = res === 'BREAKEVEN';
 
-                        {/* Entrada e SL */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '12px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                            <span style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>Entrada: <strong style={{ color: '#e2e8f0' }}>{fmt(entry)}</strong></span>
-                            <span style={{ fontSize: '10px', color: '#ef4444', fontFamily: 'monospace' }}>SL: <strong style={{ color: '#fca5a5' }}>{fmt(sl)}</strong></span>
-                        </div>
+                        const dir = String(sig.sinal_ia ?? 'COMPRA');
+                        const isBuy = dir === 'COMPRA';
+                        const asset = String(sig.ativo ?? '???');
+                        const entry = Number(sig.entry_price ?? sig.preco ?? 0);
+                        const sl = Number(sig.stop_loss ?? 0);
+                        const tp1 = Number(sig.take_profit_1 ?? 0);
+                        const tp2 = Number(sig.take_profit_2 ?? 0);
+                        const tp3 = Number(sig.take_profit_3 ?? 0);
 
-                        {/* Alvo 1 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '8px' }}>
-                            <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 1 || isGain ? '#00e676' : '#64748b' }}>Alvo 1 (1:1) {maxT >= 1 || isGain ? '✓' : ''}</span>
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 1 || isGain ? '#fff' : '#475569' }}>{fmt(tp1)}</span>
-                        </div>
+                        const timeStr = sig.open_time
+                            ? new Date(String(sig.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                            : '—';
 
-                        {/* Alvo 2 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 2 || isGain ? '#00e676' : '#64748b' }}>Alvo 2 (1:2) {maxT >= 2 || isGain ? '✓' : ''}</span>
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 2 || isGain ? '#fff' : '#475569' }}>{fmt(tp2)}</span>
-                        </div>
+                        const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
 
-                        {/* Alvo 3 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 3 || isGain ? '#00e676' : '#64748b' }}>Alvo 3 (1:3) {maxT >= 3 || isGain ? '✓' : ''}</span>
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 3 || isGain ? '#fff' : '#475569' }}>{fmt(tp3)}</span>
-                        </div>
+                        // Badge logic
+                        let badgeText = 'Acompanhando';
+                        let badgeColor = '#00e5ff';
+                        if (isGain) { badgeText = 'Gain (Alvo 3)'; badgeColor = '#00e676'; }
+                        else if (isBreakeven) { badgeText = `Breakeven (Pós Alvo ${maxT})`; badgeColor = '#94a3b8'; }
+                        else if (isStop) { badgeText = 'Stop Loss'; badgeColor = '#ef4444'; }
 
-                    </div>
-                </div>
-            );
-        })
-    )}
-</div>
+                        // Background row color
+                        const bgCol = isGain ? 'rgba(0,230,118,0.04)' : isStop ? 'rgba(239,68,68,0.04)' : isBreakeven ? 'rgba(148,163,184,0.03)' : 'transparent';
 
-{/* ════════════════════════════════════════
+                        return (
+                            <div key={String(sig.id)} style={{ padding: '16px 24px', background: bgCol, borderBottom: i < historico.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'default' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {isBuy ? <TrendingUp style={{ width: '16px', height: '16px', color: '#00e676' }} /> : <TrendingDown style={{ width: '16px', height: '16px', color: '#ef4444' }} />}
+                                        <span style={{ fontSize: '15px', fontWeight: 800, color: '#fff' }}>{asset}</span>
+                                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${badgeColor}20`, color: badgeColor, border: `1px solid ${badgeColor}30` }}>
+                                            {badgeText}
+                                        </span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
+                                        <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
+                                            {sig.pontos != null ? `${Number(sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.pontos))} pts` : '—'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Auditoria de Alvos (Horizontal) */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+
+                                    {/* Entrada e SL */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '12px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <span style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>Entrada: <strong style={{ color: '#e2e8f0' }}>{fmt(entry)}</strong></span>
+                                        <span style={{ fontSize: '10px', color: '#ef4444', fontFamily: 'monospace' }}>SL: <strong style={{ color: '#fca5a5' }}>{fmt(sl)}</strong></span>
+                                    </div>
+
+                                    {/* Alvo 1 */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '8px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 1 || isGain ? '#00e676' : '#64748b' }}>Alvo 1 (1:1) {maxT >= 1 || isGain ? '✓' : ''}</span>
+                                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 1 || isGain ? '#fff' : '#475569' }}>{fmt(tp1)}</span>
+                                    </div>
+
+                                    {/* Alvo 2 */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 2 || isGain ? '#00e676' : '#64748b' }}>Alvo 2 (1:2) {maxT >= 2 || isGain ? '✓' : ''}</span>
+                                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 2 || isGain ? '#fff' : '#475569' }}>{fmt(tp2)}</span>
+                                    </div>
+
+                                    {/* Alvo 3 */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 3 || isGain ? '#00e676' : '#64748b' }}>Alvo 3 (1:3) {maxT >= 3 || isGain ? '✓' : ''}</span>
+                                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 3 || isGain ? '#fff' : '#475569' }}>{fmt(tp3)}</span>
+                                    </div>
+
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+
+            {/* ════════════════════════════════════════
                 MODAL — Filtro Sniper
             ════════════════════════════════════════ */}
-{
-    filterOpen && (
-        <>
-            {/* Overlay */}
-            <div
-                onClick={() => setFilterOpen(false)}
-                style={{
-                    position: 'fixed', inset: 0, zIndex: 80,
-                    background: 'rgba(0,0,0,0.65)',
-                    backdropFilter: 'blur(4px)',
-                }}
-            />
-            {/* Painel */}
-            <div style={{
-                position: 'fixed', top: '50%', left: '50%',
-                transform: 'translate(-50%,-50%)',
-                zIndex: 81, width: '100%', maxWidth: '420px',
-                background: '#0d1117',
-                border: '1px solid rgba(0,229,255,0.2)',
-                borderRadius: '20px',
-                boxShadow: '0 24px 60px rgba(0,0,0,0.8)',
-                overflow: 'hidden',
-            }}>
-                {/* Header do modal */}
-                <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '18px 22px 14px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {
+                filterOpen && (
+                    <>
+                        {/* Overlay */}
+                        <div
+                            onClick={() => setFilterOpen(false)}
+                            style={{
+                                position: 'fixed', inset: 0, zIndex: 80,
+                                background: 'rgba(0,0,0,0.65)',
+                                backdropFilter: 'blur(4px)',
+                            }}
+                        />
+                        {/* Painel */}
                         <div style={{
-                            width: '32px', height: '32px', borderRadius: '9px',
-                            background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.2)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            position: 'fixed', top: '50%', left: '50%',
+                            transform: 'translate(-50%,-50%)',
+                            zIndex: 81, width: '100%', maxWidth: '420px',
+                            background: '#0d1117',
+                            border: '1px solid rgba(0,229,255,0.2)',
+                            borderRadius: '20px',
+                            boxShadow: '0 24px 60px rgba(0,0,0,0.8)',
+                            overflow: 'hidden',
                         }}>
-                            <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
-                        </div>
-                        <div>
-                            <p style={{ fontSize: '14px', fontWeight: 800, color: '#fff', margin: 0 }}>Filtro Sniper</p>
-                            <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>Selecione os ativos que deseja monitorar</p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => setFilterOpen(false)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', display: 'flex', padding: '4px' }}
-                    >
-                        <X style={{ width: '18px', height: '18px' }} />
-                    </button>
-                </div>
+                            {/* Header do modal */}
+                            <div style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '18px 22px 14px',
+                                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{
+                                        width: '32px', height: '32px', borderRadius: '9px',
+                                        background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.2)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}>
+                                        <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
+                                    </div>
+                                    <div>
+                                        <p style={{ fontSize: '14px', fontWeight: 800, color: '#fff', margin: 0 }}>Filtro Sniper</p>
+                                        <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>Selecione os ativos que deseja monitorar</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setFilterOpen(false)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', display: 'flex', padding: '4px' }}
+                                >
+                                    <X style={{ width: '18px', height: '18px' }} />
+                                </button>
+                            </div>
 
-                {/* ── Selecionador de Categorias (Abas) ───────────────────────── */}
-                <div style={{
-                    padding: '14px 22px 0',
-                    display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px',
-                    scrollbarWidth: 'none', msOverflowStyle: 'none',
-                }}>
-                    {SNIPER_ASSET_GROUPS.map(cat => (
-                        <button
-                            key={cat.group}
-                            onClick={() => setSelectedCategory(cat.group)}
-                            style={{
-                                padding: '6px 14px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
-                                cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', border: 'none',
-                                background: selectedCategory === cat.group ? '#00e5ff' : 'rgba(255,255,255,0.06)',
-                                color: selectedCategory === cat.group ? '#000' : '#94a3b8',
-                            }}
-                        >
-                            {cat.group}
-                        </button>
-                    ))}
-                    {customAssets.length > 0 && (
-                        <button
-                            onClick={() => setSelectedCategory('Customizados')}
-                            style={{
-                                padding: '6px 14px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
-                                cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', border: 'none',
-                                background: selectedCategory === 'Customizados' ? '#00e5ff' : 'rgba(255,255,255,0.06)',
-                                color: selectedCategory === 'Customizados' ? '#000' : '#94a3b8',
-                            }}
-                        >
-                            Customizados
-                        </button>
-                    )}
-                </div>
-
-                {/* ── Ações rápidas ───────────────────────────────── */}
-                <div style={{
-                    display: 'flex', gap: '8px', padding: '12px 22px',
-                }}>
-                    <button onClick={selectAll} style={{
-                        flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
-                        border: '1px solid rgba(0,230,118,0.25)', background: 'rgba(0,230,118,0.08)',
-                        color: '#00e676', fontSize: '12px', fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-                    }}>
-                        <Check style={{ width: '13px', height: '13px' }} /> Selecionar Todos
-                    </button>
-                    <button onClick={clearAll} style={{
-                        flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
-                        border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)',
-                        color: '#64748b', fontSize: '12px', fontWeight: 700,
-                    }}>
-                        Limpar Seleção
-                    </button>
-                </div>
-
-                {/* ── Lista de checkboxes por Categoria selecionada ───────────────── */}
-                <div style={{
-                    padding: '0 22px 20px', maxHeight: '340px', overflowY: 'auto',
-                    borderTop: '1px solid rgba(255,255,255,0.04)',
-                }}>
-                    {/* Rendereização do Grupo Escolhido (Padrão) */}
-                    {SNIPER_ASSET_GROUPS.filter(g => g.group === selectedCategory).map(group => (
-                        <div key={group.group} style={{ marginTop: '14px' }}>
-                            {group.assets.map(asset => {
-                                const checked = selectedSignalAssets.includes(asset.value);
-                                return (
-                                    <div
-                                        key={asset.value}
-                                        onClick={() => toggleSniperAsset(asset.value)}
+                            {/* ── Selecionador de Categorias (Abas) ───────────────────────── */}
+                            <div style={{
+                                padding: '14px 22px 0',
+                                display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px',
+                                scrollbarWidth: 'none', msOverflowStyle: 'none',
+                            }}>
+                                {SNIPER_ASSET_GROUPS.map(cat => (
+                                    <button
+                                        key={cat.group}
+                                        onClick={() => setSelectedCategory(cat.group)}
                                         style={{
-                                            display: 'flex', alignItems: 'center', gap: '12px',
-                                            padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
-                                            marginBottom: '4px', transition: 'background 0.15s',
-                                            background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
-                                            border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                                            padding: '6px 14px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
+                                            cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', border: 'none',
+                                            background: selectedCategory === cat.group ? '#00e5ff' : 'rgba(255,255,255,0.06)',
+                                            color: selectedCategory === cat.group ? '#000' : '#94a3b8',
                                         }}
                                     >
-                                        <div style={{
-                                            width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                                            border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
-                                            background: checked ? '#00e5ff' : 'transparent',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            transition: 'all 0.15s',
-                                        }}>
-                                            {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
-                                        </div>
-                                        <div>
-                                            <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
-                                            <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>{asset.description}</p>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
+                                        {cat.group}
+                                    </button>
+                                ))}
+                                {customAssets.length > 0 && (
+                                    <button
+                                        onClick={() => setSelectedCategory('Customizados')}
+                                        style={{
+                                            padding: '6px 14px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
+                                            cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', border: 'none',
+                                            background: selectedCategory === 'Customizados' ? '#00e5ff' : 'rgba(255,255,255,0.06)',
+                                            color: selectedCategory === 'Customizados' ? '#000' : '#94a3b8',
+                                        }}
+                                    >
+                                        Customizados
+                                    </button>
+                                )}
+                            </div>
 
-                    {/* Renderização da Tab Customizados (Retroativa) */}
-                    {selectedCategory === 'Customizados' && customAssets.length > 0 && (
-                        <div style={{ marginTop: '14px' }}>
-                            {customAssets.map(asset => {
-                                const checked = selectedSignalAssets.includes(asset.value);
-                                return (
-                                    <div key={asset.value} style={{
-                                        display: 'flex', alignItems: 'center', gap: '10px',
-                                        padding: '9px 12px', borderRadius: '10px', cursor: 'pointer',
-                                        marginBottom: '4px', transition: 'background 0.15s',
-                                        background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
-                                        border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
-                                    }}>
-                                        {/* Checkbox */}
-                                        <div
-                                            onClick={() => toggleSniperAsset(asset.value)}
-                                            style={{
-                                                width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                                                border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
-                                                background: checked ? '#00e5ff' : 'transparent',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                transition: 'all 0.15s',
-                                            }}
-                                        >
-                                            {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
-                                        </div>
-                                        {/* Label */}
-                                        <div style={{ flex: 1 }} onClick={() => toggleSniperAsset(asset.value)}>
-                                            <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
-                                            <p style={{ fontSize: '10px', color: '#475569', margin: 0 }}>Ativo personalizado antigo</p>
-                                        </div>
-                                        {/* Botão remover */}
-                                        <button
-                                            onClick={e => { e.stopPropagation(); removeCustomAsset(asset.value); }}
-                                            title="Remover ativo"
-                                            style={{
-                                                background: 'none', border: 'none', cursor: 'pointer',
-                                                color: '#334155', padding: '3px', display: 'flex',
-                                                borderRadius: '4px', transition: 'color 0.15s',
-                                            }}
-                                            onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-                                            onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
-                                        >
-                                            <X style={{ width: '13px', height: '13px' }} />
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
+                            {/* ── Ações rápidas ───────────────────────────────── */}
+                            <div style={{
+                                display: 'flex', gap: '8px', padding: '12px 22px',
+                            }}>
+                                <button onClick={selectAll} style={{
+                                    flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
+                                    border: '1px solid rgba(0,230,118,0.25)', background: 'rgba(0,230,118,0.08)',
+                                    color: '#00e676', fontSize: '12px', fontWeight: 700,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                                }}>
+                                    <Check style={{ width: '13px', height: '13px' }} /> Selecionar Todos
+                                </button>
+                                <button onClick={clearAll} style={{
+                                    flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
+                                    border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)',
+                                    color: '#64748b', fontSize: '12px', fontWeight: 700,
+                                }}>
+                                    Limpar Seleção
+                                </button>
+                            </div>
 
-                {/* Footer */}
-                <div style={{
-                    padding: '14px 22px',
-                    borderTop: '1px solid rgba(255,255,255,0.06)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                    <span style={{ fontSize: '12px', color: '#475569' }}>
-                        <strong style={{ color: '#00e5ff' }}>{selectedSignalAssets.length}</strong> de {ALL_SNIPER_VALUES.length + customAssets.length} ativos selecionados
-                    </span>
-                    <button
-                        onClick={() => setFilterOpen(false)}
-                        style={{
-                            padding: '9px 22px', borderRadius: '10px', cursor: 'pointer', border: 'none',
-                            background: 'linear-gradient(135deg, #00e5ff, #0099cc)',
-                            color: '#000', fontWeight: 800, fontSize: '13px',
-                        }}
-                    >
-                        Confirmar
-                    </button>
-                </div>
-            </div>
-        </>
-    )
-}
+                            {/* ── Lista de checkboxes por Categoria selecionada ───────────────── */}
+                            <div style={{
+                                padding: '0 22px 20px', maxHeight: '340px', overflowY: 'auto',
+                                borderTop: '1px solid rgba(255,255,255,0.04)',
+                            }}>
+                                {/* Rendereização do Grupo Escolhido (Padrão) */}
+                                {SNIPER_ASSET_GROUPS.filter(g => g.group === selectedCategory).map(group => (
+                                    <div key={group.group} style={{ marginTop: '14px' }}>
+                                        {group.assets.map(asset => {
+                                            const checked = selectedSignalAssets.includes(asset.value);
+                                            return (
+                                                <div
+                                                    key={asset.value}
+                                                    onClick={() => toggleSniperAsset(asset.value)}
+                                                    style={{
+                                                        display: 'flex', alignItems: 'center', gap: '12px',
+                                                        padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
+                                                        marginBottom: '4px', transition: 'background 0.15s',
+                                                        background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
+                                                        border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                                                        border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
+                                                        background: checked ? '#00e5ff' : 'transparent',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.15s',
+                                                    }}>
+                                                        {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
+                                                    </div>
+                                                    <div>
+                                                        <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
+                                                        <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>{asset.description}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ))}
+
+                                {/* Renderização da Tab Customizados (Retroativa) */}
+                                {selectedCategory === 'Customizados' && customAssets.length > 0 && (
+                                    <div style={{ marginTop: '14px' }}>
+                                        {customAssets.map(asset => {
+                                            const checked = selectedSignalAssets.includes(asset.value);
+                                            return (
+                                                <div key={asset.value} style={{
+                                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                                    padding: '9px 12px', borderRadius: '10px', cursor: 'pointer',
+                                                    marginBottom: '4px', transition: 'background 0.15s',
+                                                    background: checked ? 'rgba(0,229,255,0.07)' : 'rgba(255,255,255,0.02)',
+                                                    border: `1px solid ${checked ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                                                }}>
+                                                    {/* Checkbox */}
+                                                    <div
+                                                        onClick={() => toggleSniperAsset(asset.value)}
+                                                        style={{
+                                                            width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                                                            border: `2px solid ${checked ? '#00e5ff' : '#334155'}`,
+                                                            background: checked ? '#00e5ff' : 'transparent',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            transition: 'all 0.15s',
+                                                        }}
+                                                    >
+                                                        {checked && <Check style={{ width: '11px', height: '11px', color: '#000' }} />}
+                                                    </div>
+                                                    {/* Label */}
+                                                    <div style={{ flex: 1 }} onClick={() => toggleSniperAsset(asset.value)}>
+                                                        <p style={{ fontSize: '13px', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'monospace' }}>{asset.label}</p>
+                                                        <p style={{ fontSize: '10px', color: '#475569', margin: 0 }}>Ativo personalizado antigo</p>
+                                                    </div>
+                                                    {/* Botão remover */}
+                                                    <button
+                                                        onClick={e => { e.stopPropagation(); removeCustomAsset(asset.value); }}
+                                                        title="Remover ativo"
+                                                        style={{
+                                                            background: 'none', border: 'none', cursor: 'pointer',
+                                                            color: '#334155', padding: '3px', display: 'flex',
+                                                            borderRadius: '4px', transition: 'color 0.15s',
+                                                        }}
+                                                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                                        onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+                                                    >
+                                                        <X style={{ width: '13px', height: '13px' }} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div style={{
+                                padding: '14px 22px',
+                                borderTop: '1px solid rgba(255,255,255,0.06)',
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: '12px', color: '#475569' }}>
+                                    <strong style={{ color: '#00e5ff' }}>{selectedSignalAssets.length}</strong> de {ALL_SNIPER_VALUES.length + customAssets.length} ativos selecionados
+                                </span>
+                                <button
+                                    onClick={() => setFilterOpen(false)}
+                                    style={{
+                                        padding: '9px 22px', borderRadius: '10px', cursor: 'pointer', border: 'none',
+                                        background: 'linear-gradient(135deg, #00e5ff, #0099cc)',
+                                        color: '#000', fontWeight: 800, fontSize: '13px',
+                                    }}
+                                >
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )
+            }
 
         </div >
     );
