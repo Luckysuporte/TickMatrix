@@ -360,10 +360,14 @@ export default function SinaisIA() {
         return data;
     };
 
+    // Estado visual para erro de insert (para T.I. debugar)
+    const [insertError, setInsertError] = useState<string | null>(null);
+
     // Insere novo trade no Supabase ao abrir (status ABERTO)
     const openTradeInSupabase = async (trade: ActiveTrade): Promise<string | undefined> => {
         try {
-            const { data, error } = await supabase.from('trading_history').insert({
+            setInsertError(null); // Limpa erro anterior
+            const payload = {
                 ativo: trade.asset,
                 timeframe: '5m',
                 sinal_ia: trade.direction,
@@ -377,11 +381,22 @@ export default function SinaisIA() {
                 max_target: trade.maxTargetReached ?? 0,
                 resultado: 'ABERTO',
                 open_time: trade.openTime.toISOString(),
-            }).select('id').single();
-            if (error) throw error;
+            };
+
+            console.log('[Radar Insert Payload]', payload);
+
+            const { data, error } = await supabase.from('trading_history').insert(payload).select('id').single();
+
+            if (error) {
+                const msg = `Supabase Insert Error: ${error.message} \nDetails: ${error.details}\nHint: ${error.hint}`;
+                setInsertError(msg);
+                console.error(msg);
+                throw error;
+            }
             return data?.id as string | undefined;
-        } catch (err) {
-            console.error('[Radar] Falha ao abrir trade no Supabase:', err);
+        } catch (err: any) {
+            console.error('[Radar] Falha estrutural ao abrir trade no Supabase:', err);
+            setInsertError(err?.message || 'Falha desconhecida no Insert');
             return undefined;
         }
     };
@@ -887,10 +902,22 @@ export default function SinaisIA() {
                                                 const at = activeTrades.find(t => t.asset === item.asset.value && t.status === 'ACOMPANHANDO');
                                                 if (at) {
                                                     return (
-                                                        <>
-                                                            <div style={{ fontSize: '10px', color: '#00e5ff', fontWeight: 700 }}>⏱ Gerado {at.openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                                                            <div style={{ fontSize: '9px', color: '#64748b' }}>Sinal em andamento...</div>
-                                                        </>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                                                            <div>
+                                                                <div style={{ fontSize: '10px', color: '#00e5ff', fontWeight: 700 }}>⏱ Gerado {at.openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                                                <div style={{ fontSize: '9px', color: '#64748b' }}>Sinal em andamento...</div>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => openTradeInSupabase(at)}
+                                                                style={{
+                                                                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                                                                    color: '#ef4444', fontSize: '9px', fontWeight: 800,
+                                                                    padding: '2px 8px', borderRadius: '4px', cursor: 'pointer',
+                                                                }}
+                                                            >
+                                                                🚨 FORÇAR LOG
+                                                            </button>
+                                                        </div>
                                                     );
                                                 }
                                                 return <span style={{ fontSize: '10px', color: '#334155' }}>
@@ -1124,6 +1151,28 @@ export default function SinaisIA() {
                             );
                         })}
                     </div>
+                </div>
+            )}
+
+            {/* ERROR BANNER DE INSERÇÃO */}
+            {insertError && (
+                <div style={{
+                    background: 'rgba(239, 68, 68, 0.15)', border: '2px solid #ef4444',
+                    padding: '16px 24px', borderRadius: '12px', marginBottom: '16px',
+                    display: 'flex', flexDirection: 'column', gap: '8px',
+                    boxShadow: '0 0 24px rgba(239, 68, 68, 0.4)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <strong style={{ color: '#fca5a5', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <AlertTriangle style={{ width: '18px', height: '18px' }} /> FALHA CRÍTICA DE GRAVAÇÃO NO HISTÓRICO
+                        </strong>
+                        <button onClick={() => setInsertError(null)} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}>
+                            <X style={{ width: '16px', height: '16px' }} />
+                        </button>
+                    </div>
+                    <pre style={{ margin: 0, padding: '12px', background: '#000', borderRadius: '8px', color: '#f87171', fontSize: '11px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                        {insertError}
+                    </pre>
                 </div>
             )}
 
