@@ -427,7 +427,7 @@ export default function SinaisIA() {
             today.setHours(0, 0, 0, 0);
             const { data } = await supabase
                 .from('trading_history')
-                .select('id, ativo, sinal_ia, entry_price, stop_loss, take_profit, close_price, resultado, pontos, open_time, close_time')
+                .select('id, ativo, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, pontos, open_time, close_time')
                 .gte('created_at', today.toISOString())
                 .order('created_at', { ascending: false })
                 .limit(50);
@@ -439,11 +439,25 @@ export default function SinaisIA() {
         }
     };
 
-    // Re-busca histórico quando o painel for aberto
+    // Subscrição Realtime e Load Inicial
     useEffect(() => {
-        if (showHistorico) fetchHistorico();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showHistorico]);
+        fetchHistorico(); // Carrega na inicialização independente do toggle
+
+        const channel = supabase
+            .channel('realtime_trading_history')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'trading_history' },
+                () => {
+                    fetchHistorico();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
 
     // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
     const fetchOne = async (fav: FavoriteAsset) => {
@@ -533,7 +547,7 @@ export default function SinaisIA() {
                             };
 
                             // Fechar no DB preservando o tipo exato incluindo BREAKEVEN
-                            closeTradeInSupabase(closed, currentPriceRaw, resultado);
+                            closeTradeInSupabase(closed, currentPriceRaw, resultado).then(() => fetchHistorico());
                             return closed;
                         }
 
@@ -579,6 +593,7 @@ export default function SinaisIA() {
                             { ...newTrade, supabaseId },
                             ...current.filter(t => t.id !== uniqueTradeId).slice(0, 19)
                         ]);
+                        fetchHistorico(); // Force refresh local history
                     });
 
                     return [newTrade, ...prev].slice(0, 19);
