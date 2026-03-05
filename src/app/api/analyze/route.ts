@@ -295,14 +295,16 @@ export async function POST(req: NextRequest) {
             low: f(result.low),
             entry: f(result.entry),
             stopLoss: f(result.stopLoss),
-            // TP1 = R:R 1:1  |  takeProfit1 no card principal = TP2 (1:2)  |  TP3 = 1:3
-            takeProfit1: f(result.takeProfit2),   // card principal exibe o alvo 1:2
+            takeProfit1: f(result.takeProfit1),
             takeProfit2: f(result.takeProfit2),
             takeProfit3: f(result.takeProfit3),
-            riskReward: result.riskReward,        // "1:2"
-            // ─── Valores brutos para cálculo de lote ────────────────────────
+            riskReward: result.riskReward,
+            // Valores brutos
             entryRaw: result.entry,
             stopLossRaw: result.stopLoss,
+            takeProfit1Raw: result.takeProfit1,
+            takeProfit2Raw: result.takeProfit2,
+            takeProfit3Raw: result.takeProfit3,
             takeProfitRaw: result.takeProfit2,    // alvo principal (1:2)
         });
 

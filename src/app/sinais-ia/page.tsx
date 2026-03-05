@@ -90,6 +90,9 @@ type ActiveTrade = {
     direction: 'COMPRA' | 'VENDA';
     entryRaw: number;
     stopLossRaw: number;
+    takeProfit1Raw: number;
+    takeProfit2Raw: number;
+    takeProfit3Raw: number;
     takeProfitRaw: number;
     openTime: Date;
     stars: number;
@@ -97,6 +100,7 @@ type ActiveTrade = {
     closePrice?: number;
     points?: number;
     supabaseId?: string; // UUID retornado pelo INSERT no banco
+    maxTargetReached?: number; // 0=none, 1=TP1, 2=TP2, 3=TP3
 };
 
 // ─── Audio helper ──────────────────────────────────────────────────────────
@@ -325,7 +329,11 @@ export default function SinaisIA() {
                 preco: String(trade.entryRaw),
                 entry_price: trade.entryRaw,
                 stop_loss: trade.stopLossRaw,
+                take_profit_1: trade.takeProfit1Raw,
+                take_profit_2: trade.takeProfit2Raw,
+                take_profit_3: trade.takeProfit3Raw,
                 take_profit: trade.takeProfitRaw,
+                max_target: trade.maxTargetReached ?? 0,
                 resultado: 'ABERTO',
                 open_time: trade.openTime.toISOString(),
             }).select('id').single();
@@ -338,13 +346,14 @@ export default function SinaisIA() {
     };
 
     // Atualiza trade fechado no Supabase (UPDATE usando supabaseId)
-    const closeTradeInSupabase = async (trade: ActiveTrade, closePrice: number, resultado: 'GAIN' | 'STOP') => {
+    const closeTradeInSupabase = async (trade: ActiveTrade, closePrice: number, resultado: 'GAIN' | 'STOP' | 'BREAKEVEN') => {
         try {
             if (trade.supabaseId) {
                 await supabase.from('trading_history').update({
                     close_price: closePrice,
                     resultado,
                     pontos: trade.points ?? 0,
+                    max_target: trade.maxTargetReached ?? 0,
                     close_time: new Date().toISOString(),
                 }).eq('id', trade.supabaseId);
             } else {
@@ -352,7 +361,12 @@ export default function SinaisIA() {
                 await supabase.from('trading_history').insert({
                     ativo: trade.asset, timeframe: '5m', sinal_ia: trade.direction,
                     preco: String(trade.entryRaw), entry_price: trade.entryRaw,
-                    stop_loss: trade.stopLossRaw, take_profit: trade.takeProfitRaw,
+                    stop_loss: trade.stopLossRaw,
+                    take_profit_1: trade.takeProfit1Raw,
+                    take_profit_2: trade.takeProfit2Raw,
+                    take_profit_3: trade.takeProfit3Raw,
+                    take_profit: trade.takeProfitRaw,
+                    max_target: trade.maxTargetReached ?? 0,
                     close_price: closePrice, resultado,
                     pontos: trade.points ?? 0,
                     open_time: trade.openTime.toISOString(),
@@ -414,7 +428,10 @@ export default function SinaisIA() {
             const currentPriceRaw: number = m5Data.priceRaw ?? 0;
             const entryRaw: number = m5Data.entryRaw ?? currentPriceRaw;
             const stopLossRaw: number = m5Data.stopLossRaw ?? 0;
-            const takeProfitRaw: number = m5Data.takeProfitRaw ?? 0;
+            const takeProfit1Raw: number = m5Data.takeProfit1Raw ?? 0;
+            const takeProfit2Raw: number = m5Data.takeProfit2Raw ?? 0;
+            const takeProfit3Raw: number = m5Data.takeProfit3Raw ?? 0;
+            const takeProfitRaw: number = takeProfit2Raw; // Mantém fallback/legacy
 
             // ── Verificar trades abertos deste ativo ─────────────────────────
             if (currentPriceRaw > 0) {
@@ -422,28 +439,68 @@ export default function SinaisIA() {
                     const next = prev.map(trade => {
                         if (trade.asset !== fav.value || trade.status !== 'ACOMPANHANDO') return trade;
 
-                        const isGain = trade.direction === 'COMPRA'
-                            ? currentPriceRaw >= trade.takeProfitRaw
-                            : currentPriceRaw <= trade.takeProfitRaw;
+                        let maxT = trade.maxTargetReached ?? 0;
+                        const isBuy = trade.direction === 'COMPRA';
 
-                        const isStop = trade.direction === 'COMPRA'
-                            ? currentPriceRaw <= trade.stopLossRaw
-                            : currentPriceRaw >= trade.stopLossRaw;
+                        // Atualiza maior alvo atingido
+                        if (isBuy) {
+                            if (currentPriceRaw >= trade.takeProfit3Raw) maxT = Math.max(maxT, 3);
+                            else if (currentPriceRaw >= trade.takeProfit2Raw) maxT = Math.max(maxT, 2);
+                            else if (currentPriceRaw >= trade.takeProfit1Raw) maxT = Math.max(maxT, 1);
+                        } else {
+                            if (currentPriceRaw <= trade.takeProfit3Raw) maxT = Math.max(maxT, 3);
+                            else if (currentPriceRaw <= trade.takeProfit2Raw) maxT = Math.max(maxT, 2);
+                            else if (currentPriceRaw <= trade.takeProfit1Raw) maxT = Math.max(maxT, 1);
+                        }
 
-                        if (isGain || isStop) {
-                            const resultado: 'GAIN' | 'STOP' = isGain ? 'GAIN' : 'STOP';
-                            const points = isGain
-                                ? Math.abs(trade.takeProfitRaw - trade.entryRaw)
-                                : -Math.abs(trade.stopLossRaw - trade.entryRaw);
+                        // Verifica Full Gain (Target 3)
+                        const isFullGain = maxT === 3;
+
+                        // Verifica Stop Loss
+                        // Se maxT > 0, o SL vira Breakeven (preço de entrada)
+                        const currentStopLoss = maxT > 0 ? trade.entryRaw : trade.stopLossRaw;
+
+                        const isStop = isBuy
+                            ? currentPriceRaw <= currentStopLoss
+                            : currentPriceRaw >= currentStopLoss;
+
+                        if (isFullGain || isStop) {
+                            // Definir o resultado
+                            let resultado: 'GAIN' | 'STOP' | 'BREAKEVEN';
+                            if (isFullGain) {
+                                resultado = 'GAIN';
+                            } else if (maxT > 0) {
+                                resultado = 'BREAKEVEN';
+                            } else {
+                                resultado = 'STOP';
+                            }
+
+                            // Cálculo de pontos
+                            let points = 0;
+                            if (resultado === 'GAIN') {
+                                points = Math.abs(trade.takeProfit3Raw - trade.entryRaw);
+                            } else if (resultado === 'STOP') {
+                                points = -Math.abs(trade.stopLossRaw - trade.entryRaw);
+                            } // BREAKEVEN = 0 pontos
+
                             const closed: ActiveTrade = {
                                 ...trade,
-                                status: resultado,
+                                maxTargetReached: maxT,
+                                status: resultado === 'BREAKEVEN' ? 'STOP' : resultado, // UI trata BREAKEVEN na listagem de recents apenas
                                 closePrice: currentPriceRaw,
                                 points,
                             };
+
+                            // Fechar no DB preservando o tipo exato incluindo BREAKEVEN
                             closeTradeInSupabase(closed, currentPriceRaw, resultado);
                             return closed;
                         }
+
+                        // Trade segue aberto com atualização do target
+                        if (maxT !== trade.maxTargetReached) {
+                            return { ...trade, maxTargetReached: maxT };
+                        }
+
                         return trade;
                     });
                     return next;
@@ -458,6 +515,9 @@ export default function SinaisIA() {
                     direction: direction as 'COMPRA' | 'VENDA',
                     entryRaw,
                     stopLossRaw,
+                    takeProfit1Raw,
+                    takeProfit2Raw,
+                    takeProfit3Raw,
                     takeProfitRaw,
                     openTime: new Date(),
                     stars,
@@ -1346,7 +1406,7 @@ export default function SinaisIA() {
                         <Zap style={{ width: '14px', height: '14px', color: '#ff9900' }} /> Sinais Recentes
                     </span>
                 </div>
-                {RECENT_SIGNALS.length === 0 ? (
+                {historico.length === 0 ? (
                     /* ── Empty State ─────────────────────────────────────────── */
                     <div style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -1389,86 +1449,98 @@ export default function SinaisIA() {
                         {/* Textos */}
                         <div style={{ textAlign: 'center' }}>
                             <p style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', margin: '0 0 6px' }}>
-                                Modo Sniper ativado.
+                                Acompanhando mercado...
                             </p>
                             <p style={{ fontSize: '11px', color: '#334155', margin: '0 0 10px', letterSpacing: '0.02em' }}>
-                                Aguardando oportunidades de Elite nos ativos selecionados...
+                                Nenhum sinal registrado hoje ainda.
                             </p>
-                            {selectedSignalAssets.length > 0 ? (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center', marginBottom: '4px' }}>
-                                    {selectedSignalAssets.map(v => (
-                                        <span key={v} style={{
-                                            fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '5px',
-                                            background: 'rgba(0,229,255,0.08)', color: '#00e5ff',
-                                            border: '1px solid rgba(0,229,255,0.18)',
-                                        }}>{v}</span>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p style={{ fontSize: '11px', color: '#ef4444', margin: 0 }}>
-                                    ⚠ Nenhum ativo selecionado no filtro Sniper.
-                                </p>
-                            )}
-                        </div>
-                        {/* Linha decorativa */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                            {[...Array(3)].map((_, i) => (
-                                <div key={i} style={{
-                                    width: '4px', height: '4px', borderRadius: '50%',
-                                    background: '#1e293b',
-                                }} />
-                            ))}
                         </div>
                     </div>
                 ) : (
-                    RECENT_SIGNALS.map((sig, i) => (
-                        <div key={sig.id} style={{ padding: '12px 24px', background: rowBg(sig.positive, sig.badge), borderBottom: i < RECENT_SIGNALS.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = rowBg(sig.positive, sig.badge))}
-                        >
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                        {sig.direction === 'buy' ? <TrendingUp style={{ width: '14px', height: '14px', color: '#00e676' }} /> : <TrendingDown style={{ width: '14px', height: '14px', color: '#ff3d00' }} />}
-                                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>{sig.asset}</span>
-                                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${sig.badgeColor}20`, color: sig.badgeColor }}>{sig.badge} {sig.badge === 'Take' ? '✓' : '✗'}</span>
+                    historico.slice(0, 5).map((row, i) => {
+                        const sig = row as Record<string, unknown>;
+                        const res = String(sig.resultado ?? '');
+                        const maxT = Number(sig.max_target ?? 0);
+
+                        const isGain = res === 'GAIN';
+                        const isStop = res === 'STOP';
+                        const isAberto = res === 'ABERTO';
+                        const isBreakeven = res === 'BREAKEVEN';
+
+                        const dir = String(sig.sinal_ia ?? 'COMPRA');
+                        const isBuy = dir === 'COMPRA';
+                        const asset = String(sig.ativo ?? '???');
+                        const entry = Number(sig.entry_price ?? 0);
+                        const sl = Number(sig.stop_loss ?? 0);
+                        const tp1 = Number(sig.take_profit_1 ?? 0);
+                        const tp2 = Number(sig.take_profit_2 ?? 0);
+                        const tp3 = Number(sig.take_profit_3 ?? 0);
+
+                        const timeStr = sig.open_time
+                            ? new Date(String(sig.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                            : '—';
+
+                        const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
+
+                        // Badge logic
+                        let badgeText = 'Acompanhando';
+                        let badgeColor = '#00e5ff';
+                        if (isGain) { badgeText = 'Gain (Alvo 3)'; badgeColor = '#00e676'; }
+                        else if (isBreakeven) { badgeText = `Breakeven (Pós Alvo ${maxT})`; badgeColor = '#94a3b8'; }
+                        else if (isStop) { badgeText = 'Stop Loss'; badgeColor = '#ef4444'; }
+
+                        // Background row color
+                        const bgCol = isGain ? 'rgba(0,230,118,0.04)' : isStop ? 'rgba(239,68,68,0.04)' : isBreakeven ? 'rgba(148,163,184,0.03)' : 'transparent';
+
+                        return (
+                            <div key={String(sig.id)} style={{ padding: '16px 24px', background: bgCol, borderBottom: i < historico.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'default' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {isBuy ? <TrendingUp style={{ width: '16px', height: '16px', color: '#00e676' }} /> : <TrendingDown style={{ width: '16px', height: '16px', color: '#ef4444' }} />}
+                                        <span style={{ fontSize: '15px', fontWeight: 800, color: '#fff' }}>{asset}</span>
+                                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${badgeColor}20`, color: badgeColor, border: `1px solid ${badgeColor}30` }}>
+                                            {badgeText}
+                                        </span>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.2)' }}>SL: {sig.stopLoss}</span>
-                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(74,222,128,0.2)' }}>TP: {sig.takeProfit}</span>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
+                                        <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
+                                            {sig.pontos != null ? `${Number(sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.pontos))} pts` : '—'}
+                                        </p>
                                     </div>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 4px' }}>{sig.time}</p>
-                                    <p style={{ fontSize: '11px', color: '#475569', margin: 0, fontFamily: 'monospace' }}>{sig.stats}</p>
+
+                                {/* Auditoria de Alvos (Horizontal) */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+
+                                    {/* Entrada e SL */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '12px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <span style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>Entrada: <strong style={{ color: '#e2e8f0' }}>{fmt(entry)}</strong></span>
+                                        <span style={{ fontSize: '10px', color: '#ef4444', fontFamily: 'monospace' }}>SL: <strong style={{ color: '#fca5a5' }}>{fmt(sl)}</strong></span>
+                                    </div>
+
+                                    {/* Alvo 1 */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '8px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 1 || isGain ? '#00e676' : '#64748b' }}>Alvo 1 (1:1) {maxT >= 1 || isGain ? '✓' : ''}</span>
+                                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 1 || isGain ? '#fff' : '#475569' }}>{fmt(tp1)}</span>
+                                    </div>
+
+                                    {/* Alvo 2 */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 2 || isGain ? '#00e676' : '#64748b' }}>Alvo 2 (1:2) {maxT >= 2 || isGain ? '✓' : ''}</span>
+                                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 2 || isGain ? '#fff' : '#475569' }}>{fmt(tp2)}</span>
+                                    </div>
+
+                                    {/* Alvo 3 */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 3 || isGain ? '#00e676' : '#64748b' }}>Alvo 3 (1:3) {maxT >= 3 || isGain ? '✓' : ''}</span>
+                                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 3 || isGain ? '#fff' : '#475569' }}>{fmt(tp3)}</span>
+                                    </div>
+
                                 </div>
                             </div>
-                            <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.03)', margin: '14px 0' }} />
-                            {/* Calculadora de Lote e Risco */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <ShieldCheck style={{ width: '14px', height: '14px', color: '#00e5ff' }} />
-                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>Dimensionamento da Posição</span>
-                                </div>
-                                {(() => {
-                                    const calc = calculateSuggestedLot(accountBalance, riskPercentage, sig.entryPrice, sig.stopLossPrice, sig.asset);
-                                    if (!calc.valid) {
-                                        return (
-                                            <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <span style={{ color: '#f59e0b' }}>&#9203;</span>
-                                                {calc.message}
-                                            </div>
-                                        );
-                                    }
-                                    return (
-                                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '6px' }}>
-                                            Lote Recomendado: <span style={{ color: '#00e5ff', fontWeight: 800 }}>{calc.lotLabel}</span> | Risco Total: <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
 
