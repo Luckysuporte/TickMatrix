@@ -415,7 +415,8 @@ export default function SinaisIA() {
             const payload = {
                 close_price: closePrice,
                 resultado,
-                pontos: trade.points ?? 0,
+                resultado_pontos: trade.points ?? 0, // novo campo exigido
+                pontos: trade.points ?? 0,          // mantido para retrocompatibilidade
                 max_target: trade.maxTargetReached ?? 0,
                 close_time: new Date().toISOString(),
             };
@@ -441,7 +442,7 @@ export default function SinaisIA() {
             today.setHours(0, 0, 0, 0);
             const { data } = await supabase
                 .from('trading_history')
-                .select('id, ativo, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, pontos, open_time, close_time, signal_time, execution_time, stars_at_entry')
+                .select('id, ativo, preco, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, resultado_pontos, pontos, open_time, close_time, signal_time, execution_time, stars_at_entry')
                 .gte('created_at', today.toISOString())
                 .order('created_at', { ascending: false })
                 .limit(50);
@@ -472,6 +473,27 @@ export default function SinaisIA() {
             supabase.removeChannel(channel);
         };
     }, []);
+
+    // Effect para sincronizar Log de Performance (activeTrades) com o Histórico (banco real)
+    useEffect(() => {
+        if (historico.length === 0) return;
+
+        setActiveTrades(prev => prev.filter(trade => {
+            // Procura se esse trade.asset já foi fechado no histórico mais recente
+            // (Assumimos que as inserções mais recentes estão no topo do array)
+            const dbRef = historico.find(h => {
+                const r = h as Record<string, unknown>;
+                return r.ativo === trade.asset && String(r.resultado) !== 'ABERTO';
+            });
+            // Se achou um registro do mesmo ativo não aberto (fechado recentemente por sql ou ui), retira do local log.
+            if (dbRef) {
+                // Verifica se o fechamento é posterior à abertura local (evita apagar trades novos após fechamento antigo)
+                const closeT = new Date(String((dbRef as any).close_time)).getTime();
+                if (closeT > trade.openTime.getTime()) return false;
+            }
+            return true;
+        }));
+    }, [historico]);
 
     // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
     const fetchOne = async (fav: FavoriteAsset) => {
@@ -1259,7 +1281,7 @@ export default function SinaisIA() {
                                     <tbody>
                                         {historico.filter(r => r.ativo !== 'TESTE_TI').map((row, i) => {
                                             const r = row as Record<string, unknown>;
-                                            const res = String(r.resultado ?? '');
+                                            const res = String(r.resultado ?? '').toUpperCase();
                                             const isGain = res === 'GAIN';
                                             const isStop = res === 'STOP';
                                             const isAberto = res === 'ABERTO';
@@ -1311,7 +1333,7 @@ export default function SinaisIA() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
-                                                        {r.pontos != null ? `${Number(r.pontos) >= 0 ? '+' : ''}${Number(r.pontos).toFixed(2)} pts` : '—'}
+                                                        {(r.resultado_pontos ?? r.pontos) != null ? `${Number(r.resultado_pontos ?? r.pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos ?? r.pontos).toFixed(2)} pts` : '--'}
                                                     </td>
                                                 </tr>
                                             );
@@ -1561,7 +1583,7 @@ export default function SinaisIA() {
                 ) : (
                     historico.filter(r => r.ativo !== 'TESTE_TI').slice(0, 5).map((row, i) => {
                         const sig = row as Record<string, unknown>;
-                        const res = String(sig.resultado ?? '');
+                        const res = String(sig.resultado ?? '').toUpperCase();
                         const maxT = Number(sig.max_target ?? 0);
 
                         const isGain = res === 'GAIN';
@@ -1607,10 +1629,9 @@ export default function SinaisIA() {
                                     <div style={{ textAlign: 'right' }}>
                                         <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
                                         <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
-                                            {sig.pontos != null ? `${Number(sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.pontos))} pts` : '—'}
+                                            {((sig.resultado_pontos ?? sig.pontos) != null) ? `${Number(sig.resultado_pontos ?? sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.resultado_pontos ?? sig.pontos))} pts` : '--'}
                                         </p>
-                                    </div>
-                                </div>
+                                    </div>                              </div>
 
                                 {/* Auditoria de Alvos (Horizontal) */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
