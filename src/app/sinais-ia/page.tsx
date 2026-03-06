@@ -392,6 +392,7 @@ export default function SinaisIA() {
                 execution_time: trade.openTime.toISOString(),
                 stars_at_entry: trade.stars,
                 open_time: trade.openTime.toISOString(),
+                atraso: Math.max(0, Math.floor((trade.openTime.getTime() - trade.signalTime.getTime()) / 1000)),
             };
 
             console.log('[Radar Insert Payload]', payload);
@@ -1329,10 +1330,22 @@ export default function SinaisIA() {
                                                 const eT = new Date(String(r.execution_time)).getTime();
                                                 const diffMs = Math.max(0, eT - sT);
                                                 delaySecs = diffMs / 1000;
+                                                
                                                 const m = Math.floor(delaySecs / 60);
                                                 const s = Math.floor(delaySecs % 60);
-                                                delayStr = `+${m}m ${s}s`;
+                                                delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
+                                            } else if (r.atraso != null) {
+                                                delaySecs = Number(r.atraso);
+                                                const m = Math.floor(delaySecs / 60);
+                                                const s = Math.floor(delaySecs % 60);
+                                                delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
                                             }
+
+                                            // Estilo do Delay
+                                            const isFast = delaySecs > 0 && delaySecs < 10;
+                                            const isSlow = delaySecs > 60;
+                                            const delayColor = isFast ? '#00e676' : isSlow ? '#fbbf24' : '#64748b';
+                                            const delayLabel = isFast ? ' (Sinal Rápido)' : isSlow ? ' (Sinal Lento)' : '';
 
                                             return (
                                                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
@@ -1350,8 +1363,8 @@ export default function SinaisIA() {
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: String(r.sinal_ia) === 'COMPRA' ? '#00e676' : '#ef4444' }}>{String(r.sinal_ia ?? '')}</td>
                                                     <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#94a3b8' }}>{fmt(r.entry_price ?? r.preco)}</td>
                                                     <td style={{ padding: '8px 12px' }}>
-                                                        <span style={{ fontSize: '10px', color: delaySecs > 300 ? '#ef4444' : '#64748b', fontWeight: 700 }}>
-                                                            Delay: {delayStr}
+                                                        <span style={{ fontSize: '10px', color: delayColor, fontWeight: 700 }}>
+                                                            Delay: {delayStr}{delayLabel}
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px' }}>
