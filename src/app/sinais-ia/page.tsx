@@ -140,7 +140,7 @@ function playAlert(stars: number, direction: 'buy' | 'sell') {
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
             osc.start(); osc.stop(ctx.currentTime + 0.35);
         }
-    } catch (e) { 
+    } catch (e) {
         console.warn('[Audio] Falha ao tocar alerta (bloqueado pelo navegador?):', e);
     }
 }
@@ -210,7 +210,7 @@ function TFChip({ label, data }: { label: string; data: TFData | null }) {
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function SinaisIA() {
     const [active, setActive] = useState(false);
-    
+
     useEffect(() => {
         console.log('🚀 [TickMatrix] SinaisIA Component Loaded');
     }, []);
@@ -223,7 +223,7 @@ export default function SinaisIA() {
     const [showHistorico, setShowHistorico] = useState(true);
     const [loadingHistorico, setLoadingHistorico] = useState(false);
     const prevSignals = useRef<Record<string, string>>({});
-    const prevStarsMap = useRef<Record<string, number>>({}); 
+    const prevStarsMap = useRef<Record<string, number>>({});
     const signalTimes = useRef<Record<string, Date>>({}); // Birth time of the current signal
 
     // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
@@ -475,9 +475,10 @@ export default function SinaisIA() {
         try {
             const { data } = await supabase
                 .from('trading_history')
-                .select('id, ativo, preco, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, resultado_pontos, pontos, open_time, close_time, signal_time, execution_time, stars_at_entry, created_at, lucro_usd')
+                .select('*') // Puxa tudo para evitar erro de coluna específica
                 .order('created_at', { ascending: false })
-                .limit(50);
+                .limit(20); // Reduzi para 20 para carregar mais rápido
+
             setHistorico(data ?? []);
         } catch (err) {
             console.error('[Histórico] Falha ao buscar:', err);
@@ -489,13 +490,13 @@ export default function SinaisIA() {
     // Cálculo de P/L Diário (Hoje)
     const dailyPnl = historico.reduce((acc, row) => {
         if (row.resultado === 'ABERTO') return acc;
-        
+
         // Verifica se é de hoje (UTC-3 / America/Sao_Paulo)
         const d = new Date(String(row.created_at));
         const now = new Date();
-        const isToday = d.getDate() === now.getDate() && 
-                        d.getMonth() === now.getMonth() && 
-                        d.getFullYear() === now.getFullYear();
+        const isToday = d.getDate() === now.getDate() &&
+            d.getMonth() === now.getMonth() &&
+            d.getFullYear() === now.getFullYear();
 
         if (isToday) {
             // Se for STOP, lucro_usd deve ser negativo se não estiver salvo corretamente
@@ -579,12 +580,12 @@ export default function SinaisIA() {
             // Registrar nascimento do sinal (Timestamp de Virada)
             const now = new Date();
             const oldStars = prevStarsMap.current[fav.value] || 0;
-            
+
             // Condição de Virada: 
             // 1. Mudou de NEUTRO para COMPRA/VENDA
             // 2. Ou subiu de < 3 estrelas para 3 estrelas (Elite)
             const isTurnaround = (direction !== 'NEUTRO') && (
-                (oldSig === 'NEUTRO' || oldSig === undefined) || 
+                (oldSig === 'NEUTRO' || oldSig === undefined) ||
                 (oldStars < 3 && stars === 3)
             );
 
@@ -947,9 +948,9 @@ export default function SinaisIA() {
                         </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ 
-                            width: `${drawdownPercent}%`, 
-                            height: '100%', 
+                        <div style={{
+                            width: `${drawdownPercent}%`,
+                            height: '100%',
                             background: `linear-gradient(90deg, ${drawdownPercent > 50 ? '#00e676' : drawdownPercent > 20 ? '#f59e0b' : '#ef4444'}, #00c853)`,
                             transition: 'width 0.5s ease-out',
                             boxShadow: '0 0 10px rgba(0,230,118,0.3)'
@@ -1121,22 +1122,22 @@ export default function SinaisIA() {
                                         {/* Início do Sinal (Timestamp de Virada) */}
                                         {item.signalStartTime && (
                                             <div style={{
-                                                marginLeft: '8px', 
-                                                background: 'rgba(255,183,0,0.05)', 
-                                                border: '1px solid rgba(255,183,0,0.15)', 
+                                                marginLeft: '8px',
+                                                background: 'rgba(255,183,0,0.05)',
+                                                border: '1px solid rgba(255,183,0,0.15)',
                                                 borderRadius: '6px',
-                                                padding: '2px 12px', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
+                                                padding: '2px 12px',
+                                                display: 'flex',
+                                                alignItems: 'center',
                                                 gap: '8px',
                                                 boxShadow: '0 0 10px rgba(0,0,0,0.2)'
                                             }}>
                                                 <span style={{ fontSize: '9px', fontWeight: 700, color: '#ffcc00', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Início do Sinal</span>
-                                                <span style={{ 
-                                                    fontSize: '13px', 
-                                                    fontWeight: 900, 
-                                                    color: '#fff', 
-                                                    fontFamily: 'monospace', 
+                                                <span style={{
+                                                    fontSize: '13px',
+                                                    fontWeight: 900,
+                                                    color: '#fff',
+                                                    fontFamily: 'monospace',
                                                     letterSpacing: '1px',
                                                     textShadow: '0 0 5px rgba(0,0,0,0.5)'
                                                 }}>
@@ -1591,7 +1592,7 @@ export default function SinaisIA() {
                                                 const eT = new Date(String(r.execution_time)).getTime();
                                                 const diffMs = Math.max(0, eT - sT);
                                                 delaySecs = diffMs / 1000;
-                                                
+
                                                 const m = Math.floor(delaySecs / 60);
                                                 const s = Math.floor(delaySecs % 60);
                                                 delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
@@ -1637,7 +1638,7 @@ export default function SinaisIA() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
-                                                        { (r.resultado_pontos ?? r.pontos) != null ? `${Number(r.resultado_pontos ?? r.pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos ?? r.pontos).toFixed(2)} pts` : '--'}
+                                                        {(r.resultado_pontos ?? r.pontos) != null ? `${Number(r.resultado_pontos ?? r.pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos ?? r.pontos).toFixed(2)} pts` : '--'}
                                                     </td>
                                                 </tr>
                                             );
