@@ -1376,7 +1376,7 @@ export default function SinaisIA() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
-                                                        {r.resultado_pontos != null ? `${Number(r.resultado_pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos).toFixed(2)} pts` : '--'}
+                                                        { (r.resultado_pontos ?? r.pontos) != null ? `${Number(r.resultado_pontos ?? r.pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos ?? r.pontos).toFixed(2)} pts` : '--'}
                                                     </td>
                                                 </tr>
                                             );

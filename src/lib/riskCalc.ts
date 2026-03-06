@@ -24,7 +24,7 @@ export function getTickConfig(sym: string): { tickValueUsd: number; isFuture: bo
     // ── Metais e Commodities Forex (lotes fracionados) ────────────────────
     // Padrão de 1 oz para metais preciosos em CFD/Spot:
     // XAU/USD: MGC-equivalente, 1pt = $1.00
-    if (s.includes('XAU')) return { tickValueUsd: 1.00, isFuture: false };
+    if (s.includes('XAU')) return { tickValueUsd: 100.00, isFuture: false };
     if (s.includes('XAG')) return { tickValueUsd: 0.50, isFuture: false };  // Prata Spot (aprox)
 
     // ── Forex Geral ────────────────────────────────────────────────────────
