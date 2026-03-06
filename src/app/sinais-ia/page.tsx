@@ -109,8 +109,11 @@ type ActiveTrade = {
 
 // ─── Audio helper ──────────────────────────────────────────────────────────
 function playAlert(stars: number, direction: 'buy' | 'sell') {
+    if (direction !== 'buy' && direction !== 'sell') return; // Segurança contra sinais neutros
+
     try {
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+        const ctx = new AudioCtx();
 
         if (stars >= 3) {
             // Alerta de Elite: 3 beeps ascendentes
@@ -136,7 +139,9 @@ function playAlert(stars: number, direction: 'buy' | 'sell') {
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
             osc.start(); osc.stop(ctx.currentTime + 0.35);
         }
-    } catch { /* silencioso se bloqueado */ }
+    } catch (e) { 
+        console.warn('[Audio] Falha ao tocar alerta (bloqueado pelo navegador?):', e);
+    }
 }
 
 // ─── Score de confluência ──────────────────────────────────────────────────
@@ -224,6 +229,7 @@ export default function SinaisIA() {
     const [lotSizeInput, setLotSizeInput] = useState(0.10);
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
+    const [audioUnlocked, setAudioUnlocked] = useState(false);
     const [filterOpen, setFilterOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<string>('Índices/Futuros');
 
@@ -1246,6 +1252,25 @@ export default function SinaisIA() {
                         />
                         Histórico de Hoje
                     </button>
+                    {/* Botão Testar Áudio */}
+                    <button
+                        onClick={() => {
+                            setAudioUnlocked(true);
+                            playAlert(3, 'buy');
+                        }}
+                        title="Testar alerta de 3 estrelas e liberar áudio"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
+                            border: `1px solid ${audioUnlocked ? 'rgba(0,230,118,0.25)' : 'rgba(255,204,0,0.3)'}`,
+                            background: audioUnlocked ? 'rgba(0,230,118,0.06)' : 'rgba(255,204,0,0.08)',
+                            color: audioUnlocked ? '#00e676' : '#ffcc00',
+                            fontSize: '11px', fontWeight: 700, transition: 'all 0.2s',
+                        }}
+                    >
+                        {audioUnlocked ? '🔊 Áudio OK' : '🔇 Testar Áudio'}
+                    </button>
+
                     {/* Botão Filtro Sniper */}
                     <button
                         onClick={() => setFilterOpen(true)}
