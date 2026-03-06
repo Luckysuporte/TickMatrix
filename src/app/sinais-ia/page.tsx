@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle, Settings, X, Check, ShieldCheck } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
-import { calculateSuggestedLot, calculateTargetProfit } from '@/lib/riskCalc';
+import { calculateSuggestedLot, calculateTargetProfit, getTickConfig } from '@/lib/riskCalc';
 import { supabase } from '@/lib/supabase';
 
 // ─── Sinais Recentes — mock demonstrativo XAU/USD ─────────
