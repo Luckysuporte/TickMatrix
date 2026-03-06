@@ -1748,7 +1748,7 @@ export default function SinaisIA() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                                     <thead>
                             <tr style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                {['Horário', 'Ativo', 'Direção', 'Entrada', 'Atraso', 'Resultado', 'Lucro (USD)'].map(h => (
+                                {['Horário', 'Ativo', 'Direção', 'Entrada', 'Atraso', 'Resultado', 'Pontos | Lucro'].map(h => (
                                     <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                                 ))}
                             </tr>
@@ -1763,18 +1763,17 @@ export default function SinaisIA() {
                                 const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
                                 const formatValue = (v: unknown) => v != null ? Number(v).toFixed(Number(v) > 100 ? 2 : 4) : '—';
                                 
-                                // Cálculo de Lucro Financeiro
+                                // Cálculo de Lucro Financeiro e Pontos
+                                const ptsRaw = Number(r.resultado_pontos ?? r.pontos ?? 0);
                                 let pnlUsd = Number(r.lucro_usd);
                                 if (!pnlUsd && pnlUsd !== 0) {
-                                    const pts = Number(r.resultado_pontos ?? r.pontos ?? 0);
                                     const sym = String(r.ativo);
                                     const { tickValueUsd } = getTickConfig(sym);
                                     
-                                    pnlUsd = pts * lotSizeInput * tickValueUsd;
-                                    
-                                    if (sym.includes('XAU') && pts > 100) {
-                                        pnlUsd = (pts / 100) * lotSizeInput * tickValueUsd;
-                                    }
+                                    // Cálculo base: (Variação de Preço) * Lote * tickValueUsd
+                                    // No Ouro (XAU), se ptsRaw estiver em 'pips' (ex: 30), dividimos por 100 para pegar variação real ($0.30)
+                                    const multiplier = (sym.includes('XAU') && ptsRaw > 100) ? 0.01 : 1;
+                                    pnlUsd = ptsRaw * multiplier * lotSizeInput * tickValueUsd;
                                 }
 
                                 const timeRaw = r.close_time || r.open_time || r.execution_time || r.signal_time || r.created_at;
@@ -1826,7 +1825,14 @@ export default function SinaisIA() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
-                                                        {res === 'ABERTO' ? '--' : `$ ${pnlUsd.toFixed(2)}`}
+                                                        {res === 'ABERTO' ? '--' : (
+                                                            <>
+                                                                {ptsRaw >= 0 ? '+' : ''}{ptsRaw.toFixed(2)} pts
+                                                                <span style={{ marginLeft: '8px', opacity: 0.8, fontSize: '10px', color: '#94a3b8' }}>
+                                                                    (${pnlUsd.toFixed(2)})
+                                                                </span>
+                                                            </>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
