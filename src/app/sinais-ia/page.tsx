@@ -243,6 +243,8 @@ export default function SinaisIA() {
     const [countdown, setCountdown] = useState(120);
     const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
     const [historico, setHistorico] = useState<Record<string, unknown>[]>([]);
+    const [historyTab, setHistoryTab] = useState<'monitor' | 'archive'>('monitor');
+    const [archiveData, setArchiveData] = useState<Record<string, unknown>[]>([]);
     const [showHistorico, setShowHistorico] = useState(true);
     const [loadingHistorico, setLoadingHistorico] = useState(false);
     const prevSignals = useRef<Record<string, string>>({});
@@ -538,11 +540,15 @@ export default function SinaisIA() {
     const fetchHistorico = async () => {
         setLoadingHistorico(true);
         try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
             const { data } = await supabase
                 .from('trading_history')
-                .select('*') // Puxa tudo para evitar erro de coluna específica
+                .select('*')
+                .gte('created_at', today.toISOString())
                 .order('created_at', { ascending: false })
-                .limit(20); // Reduzi para 20 para carregar mais rápido
+                .limit(20);
 
             setHistorico(data ?? []);
         } catch (err) {
@@ -556,33 +562,85 @@ export default function SinaisIA() {
     const dailyPnl = historico.reduce((acc, row) => {
         if (row.resultado === 'ABERTO') return acc;
 
-        // Verifica se é de hoje (UTC-3 / America/Sao_Paulo)
-        const d = new Date(String(row.created_at));
-        const now = new Date();
-        const isToday = d.getDate() === now.getDate() &&
-            d.getMonth() === now.getMonth() &&
-            d.getFullYear() === now.getFullYear();
-
-        if (isToday) {
-            let pnlUsd = Number(row.lucro_usd);
-            // Se lucro_usd não está no banco, calcula a partir dos pontos (retropatibilidade)
-            if (!pnlUsd && pnlUsd !== 0) {
-                const pts = Number(row.resultado_pontos ?? row.pontos ?? 0);
-                const cfg = getTickConfig(String(row.ativo));
-                // Correção do erro ts(2339) para garantir somatória do lucro 515.34
-                pnlUsd = (pts / (cfg as any).tickSize) * (cfg as any).tickValue * lotSizeInput;
-            }
-            return acc + (pnlUsd || 0);
+        let pnlUsd = Number(row.lucro_usd);
+        // Se lucro_usd não está no banco, calcula a partir dos pontos (retropatibilidade)
+        if (!pnlUsd && pnlUsd !== 0) {
+            const pts = Number(row.resultado_pontos ?? row.pontos ?? 0);
+            const cfg = getTickConfig(String(row.ativo));
+            // Correção do erro ts(2339) para garantir somatória do lucro 515.34
+            pnlUsd = (pts / (cfg as any).tickSize) * (cfg as any).tickValue * lotSizeInput;
         }
-        return acc;
+        return acc + (pnlUsd || 0);
     }, 0);
 
     const drawdownRestante = Math.max(0, dailyDrawdownLimit + dailyPnl);
     const drawdownPercent = (drawdownRestante / dailyDrawdownLimit) * 100;
 
+    // ── Lógica de Arquivamento Diário (Auto-Archive) ─────────────────────────
+    const archiveOldTrades = async () => {
+        try {
+            // Pega o início do dia de hoje (meia-noite BRT)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // 1. Busca trades antigos (criados antes de hoje) que ainda estão na trading_history
+            const { data: oldTrades, error: fetchErr } = await supabase
+                .from('trading_history')
+                .select('*')
+                .lt('created_at', today.toISOString());
+
+            if (fetchErr) throw fetchErr;
+            
+            if (oldTrades && oldTrades.length > 0) {
+                console.log(`📦 [Archive] Movendo ${oldTrades.length} registros antigos para trading_archive...`);
+                
+                // 2. Insere no arquivo
+                const { error: insErr } = await supabase
+                    .from('trading_archive')
+                    .insert(oldTrades);
+                
+                if (insErr) {
+                    // Se a tabela não existir, o erro vai cair aqui. 
+                    // Em um ambiente real, poderíamos tentar criar a tabela, 
+                    // mas aqui vamos apenas logar e parar para segurança.
+                    console.error('[Archive] Falha ao inserir na trading_archive:', insErr);
+                    return;
+                }
+
+                // 3. Remove da tabela principal
+                const ids = oldTrades.map(t => t.id);
+                await supabase.from('trading_history').delete().in('id', ids);
+                
+                console.log('✅ [Archive] Limpeza concluída.');
+                fetchHistorico();
+            }
+        } catch (err) {
+            console.error('[Archive] Erro na migração diária:', err);
+        }
+    };
+
+    // Busca histórico arquivado
+    const fetchArchive = async () => {
+        try {
+            const { data } = await supabase
+                .from('trading_archive')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(50);
+            setArchiveData(data ?? []);
+        } catch (err) {
+            console.error('[Archive] Falha ao buscar:', err);
+        }
+    };
+
     // Subscrição Realtime e Load Inicial
     useEffect(() => {
+        archiveOldTrades(); // Limpa trades antigos ao carregar
         fetchHistorico(); // Carrega na inicialização independente do toggle
+        
+        if (historyTab === 'archive') {
+            fetchArchive();
+        }
 
         const channel = supabase
             .channel('realtime_trading_history')
@@ -1627,33 +1685,55 @@ export default function SinaisIA() {
                 </div>
             </div>
 
-            {/* ══ HISTÓRICO DE HOJE ══ */}
+            {/* ══ HISTÓRICO DE TRADES (TABS) ══ */}
             {
                 showHistorico && (
                     <div style={{ border: '1px solid rgba(251,191,36,0.15)', background: '#07090f', borderRadius: 0 }}>
                         <div style={{
                             padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px'
                         }}>
-                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                📅 Histórico Recente
-                                {loadingHistorico && <RefreshCw style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
-                                <span style={{ fontSize: '10px', color: '#475569', fontWeight: 400 }}>
-                                    Últimos {historico.length}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    📅 {historyTab === 'monitor' ? 'Monitor de Hoje' : 'Arquivo Histórico'}
+                                    {loadingHistorico && <RefreshCw style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
                                 </span>
-                            </span>
-                            <button onClick={fetchHistorico} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#64748b', fontSize: '10px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                
+                                {/* Seletores de Aba */}
+                                <div style={{ display: 'flex', background: '#0a0a0a', padding: '2px', borderRadius: '6px', border: '1px solid #1a1a1a' }}>
+                                    <button 
+                                        onClick={() => setHistoryTab('monitor')}
+                                        style={{ 
+                                            padding: '4px 12px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', border: 'none',
+                                            background: historyTab === 'monitor' ? '#1a1a1a' : 'transparent',
+                                            color: historyTab === 'monitor' ? '#00ff7f' : '#475569',
+                                            fontWeight: 700
+                                        }}
+                                    >HOJE</button>
+                                    <button 
+                                        onClick={() => { setHistoryTab('archive'); fetchArchive(); }}
+                                        style={{ 
+                                            padding: '4px 12px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', border: 'none',
+                                            background: historyTab === 'archive' ? '#1a1a1a' : 'transparent',
+                                            color: historyTab === 'archive' ? '#fbbf24' : '#475569',
+                                            fontWeight: 700
+                                        }}
+                                    >ARQUIVO</button>
+                                </div>
+                            </div>
+
+                            <button onClick={historyTab === 'monitor' ? fetchHistorico : fetchArchive} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#64748b', fontSize: '10px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <RefreshCw style={{ width: '10px', height: '10px' }} /> Atualizar
                             </button>
                         </div>
 
-                        {historico.length === 0 && !loadingHistorico && (
+                        {((historyTab === 'monitor' ? historico : archiveData).length === 0 && !loadingHistorico) && (
                             <div style={{ padding: '24px', textAlign: 'center', color: '#334155', fontSize: '12px' }}>
-                                Nenhum sinal registrado recentemente.
+                                Nenhum registro encontrado {historyTab === 'monitor' ? 'hoje' : 'no arquivo'}.
                             </div>
                         )}
 
-                        {historico.length > 0 && (
+                        {(historyTab === 'monitor' ? historico : archiveData).length > 0 && (
                             <div style={{ overflowX: 'auto' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                                     <thead>
@@ -1664,14 +1744,14 @@ export default function SinaisIA() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {historico.filter(r => r.ativo !== 'TESTE_TI').map((row, i) => {
+                                        {(historyTab === 'monitor' ? historico : archiveData).filter((r: any) => r.ativo !== 'TESTE_TI').map((row, i) => {
                                             const r = row as Record<string, unknown>;
                                             const res = String(r.resultado ?? '').trim().toUpperCase();
                                             const isGain = res === 'GAIN';
                                             const isStop = res === 'STOP';
                                             const isAberto = res === 'ABERTO';
                                             const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
-                                            const fmt = (v: unknown) => v != null ? Number(v).toFixed(Number(v) > 100 ? 2 : 4) : '—';
+                                            const formatValue = (v: unknown) => v != null ? Number(v).toFixed(Number(v) > 100 ? 2 : 4) : '—';
                                             const timeRaw = r.close_time || r.open_time || r.execution_time || r.signal_time || r.created_at;
                                             const timeStr = timeRaw ? formatBRT(timeRaw as string) : '—';
 
@@ -1684,28 +1764,13 @@ export default function SinaisIA() {
                                                 if (!isNaN(sT) && !isNaN(eT)) {
                                                     const diffMs = Math.max(0, eT - sT);
                                                     delaySecs = diffMs / 1000;
-
-                                                    const m = Math.floor(delaySecs / 60);
-                                                    const s = Math.floor(delaySecs % 60);
-                                                    delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
-                                                } else if (r.atraso != null) {
-                                                    delaySecs = Number(r.atraso);
                                                     const m = Math.floor(delaySecs / 60);
                                                     const s = Math.floor(delaySecs % 60);
                                                     delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
                                                 }
-                                            } else if (r.atraso != null) {
-                                                delaySecs = Number(r.atraso);
-                                                const m = Math.floor(delaySecs / 60);
-                                                const s = Math.floor(delaySecs % 60);
-                                                delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
                                             }
 
-                                            // Estilo do Delay
-                                            const isFast = delaySecs > 0 && delaySecs < 10;
-                                            const isSlow = delaySecs > 60;
-                                            const delayColor = isFast ? '#00e676' : isSlow ? '#fbbf24' : '#64748b';
-                                            const delayLabel = isFast ? ' (Sinal Rápido)' : isSlow ? ' (Sinal Lento)' : '';
+                                            const delayColor = delaySecs < 10 && delaySecs > 0 ? '#00e676' : delaySecs > 60 ? '#fbbf24' : '#64748b';
 
                                             return (
                                                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
@@ -1721,10 +1786,10 @@ export default function SinaisIA() {
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: String(r.sinal_ia) === 'COMPRA' ? '#00e676' : '#ef4444' }}>{String(r.sinal_ia ?? '')}</td>
-                                                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#94a3b8' }}>{fmt(r.entry_price ?? r.preco)}</td>
+                                                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#94a3b8' }}>{formatValue(r.entry_price ?? r.preco)}</td>
                                                     <td style={{ padding: '8px 12px' }}>
                                                         <span style={{ fontSize: '10px', color: delayColor, fontWeight: 700 }}>
-                                                            Delay: {delayStr}{delayLabel}
+                                                            {delayStr}
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px' }}>
