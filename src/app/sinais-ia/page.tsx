@@ -442,12 +442,9 @@ export default function SinaisIA() {
     const fetchHistorico = async () => {
         setLoadingHistorico(true);
         try {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
             const { data } = await supabase
                 .from('trading_history')
                 .select('id, ativo, preco, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, resultado_pontos, pontos, open_time, close_time, signal_time, execution_time, stars_at_entry')
-                .gte('created_at', today.toISOString())
                 .order('created_at', { ascending: false })
                 .limit(50);
             setHistorico(data ?? []);
@@ -1284,10 +1281,10 @@ export default function SinaisIA() {
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         }}>
                             <span style={{ fontSize: '13px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                📅 Histórico de Hoje
+                                📅 Histórico Recente
                                 {loadingHistorico && <RefreshCw style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
                                 <span style={{ fontSize: '10px', color: '#475569', fontWeight: 400 }}>
-                                    {historico.length} registros
+                                    Últimos {historico.length}
                                 </span>
                             </span>
                             <button onClick={fetchHistorico} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#64748b', fontSize: '10px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1297,7 +1294,7 @@ export default function SinaisIA() {
 
                         {historico.length === 0 && !loadingHistorico && (
                             <div style={{ padding: '24px', textAlign: 'center', color: '#334155', fontSize: '12px' }}>
-                                Nenhum sinal registrado hoje.
+                                Nenhum sinal registrado recentemente.
                             </div>
                         )}
 
