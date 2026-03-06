@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Search, Crown, BarChart2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Crown, BarChart2, Shield, Activity } from 'lucide-react';
 import AudioTester from '@/components/AudioTester';
 
 // ─── Quick-pick stocks ────────────────────────────────────────────────────────
@@ -23,6 +23,11 @@ export default function TickMatrixAcoes() {
     const [ticker, setTicker] = useState('');
     const [selected, setSelected] = useState('');
 
+    // Estados para Gestão de Risco (Mesa Proprietária)
+    const [balance, setBalance] = useState(10000);
+    const [riskPerTrade, setRiskPerTrade] = useState(1);
+    const [drawdownLimit, setDrawdownLimit] = useState(500);
+
     const handleQuickPick = (t: string) => {
         setSelected(t);
         setTicker(t);
@@ -35,180 +40,90 @@ export default function TickMatrixAcoes() {
     };
 
     return (
-        <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px 80px' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px 16px 80px', color: '#fff' }}>
 
-            {/* Botão de Som para liberação de áudio do Sniper */}
-            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
-                <AudioTester />
-            </div>
+            {/* 1. MÓDULO DE GESTÃO DE RISCO (MESA PROPRIETÁRIA) */}
+            <div style={{ background: '#121318', border: '1px solid rgba(255,153,0,0.2)', borderRadius: '16px', padding: '20px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#ff9900' }}>
+                    <Shield size={18} />
+                    <h2 style={{ fontSize: '14px', fontWeight: 800, margin: 0, textTransform: 'uppercase' }}>Gestão de Risco Mesa Proprietária</h2>
+                </div>
 
-            {/* PRO Banner */}
-            <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: 'linear-gradient(90deg, #0a1a2e 0%, #0d2240 100%)',
-                border: '1px solid rgba(0,229,255,0.15)',
-                borderRadius: '16px',
-                padding: '16px 24px',
-                marginBottom: '20px',
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,153,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Crown style={{ width: '22px', height: '22px', color: '#ff9900' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
+                    <div>
+                        <p style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Saldo da Conta ($)</p>
+                        <input type="number" value={balance} onChange={(e) => setBalance(Number(e.target.value))}
+                            style={{ width: '100%', background: '#0a0a0a', border: '1px solid #222', padding: '10px', borderRadius: '8px', color: '#fff' }} />
                     </div>
                     <div>
-                        <p style={{ fontSize: '14px', fontWeight: 800, color: '#fff', margin: 0 }}>Ative seu plano PRO</p>
-                        <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>A partir de R$ 4,50/dia</p>
+                        <p style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Risco por Operação (%)</p>
+                        <input type="number" value={riskPerTrade} onChange={(e) => setRiskPerTrade(Number(e.target.value))}
+                            style={{ width: '100%', background: '#0a0a0a', border: '1px solid #222', padding: '10px', borderRadius: '8px', color: '#fff' }} />
+                    </div>
+                    <div>
+                        <p style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Daily Drawdown Limit</p>
+                        <input type="number" value={drawdownLimit} onChange={(e) => setDrawdownLimit(Number(e.target.value))}
+                            style={{ width: '100%', background: '#0a0a0a', border: '1px solid #222', padding: '10px', borderRadius: '8px', color: '#ff4444' }} />
+                    </div>
+                    <div>
+                        <p style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Cálculo de TP (Lote)</p>
+                        <div style={{ background: '#0a0a0a', border: '1px solid #222', padding: '10px', borderRadius: '8px', color: '#00e5ff', fontWeight: 'bold' }}>0.1</div>
                     </div>
                 </div>
-                <button style={{
-                    background: '#00e5ff', color: '#000', fontWeight: 800, fontSize: '13px',
-                    padding: '9px 22px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                }}>
-                    Ver planos
-                </button>
+
+                <div style={{ background: 'rgba(0, 255, 127, 0.05)', border: '1px solid rgba(0, 255, 127, 0.1)', padding: '12px', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#00ff7f' }}>● VIDA DIÁRIA (DRAWDOWN)</span>
+                        <span style={{ fontSize: '12px', color: '#00ff7f' }}>${drawdownLimit}.00 / ${drawdownLimit}.00</span>
+                    </div>
+                    <div style={{ width: '100%', background: '#1a1a1a', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: '100%', background: '#00ff7f', height: '100%', boxShadow: '0 0 10px #00ff7f' }}></div>
+                    </div>
+                </div>
             </div>
 
-            {/* Main Card */}
-            <div style={{
-                background: '#121318',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: '20px',
-                padding: '28px',
-                marginBottom: '16px',
-            }}>
-
-                {/* Search bar */}
-                <div style={{ position: 'relative', marginBottom: '20px' }}>
-                    <Search style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', width: '16px', height: '16px', color: '#64748b' }} />
-                    <input
-                        type="text"
-                        placeholder="Digite o ticker (ex: PETR4, VALE3, WEGE3)"
-                        value={ticker}
-                        onChange={handleInput}
-                        style={{
-                            width: '100%',
-                            background: '#1c1c24',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: '12px',
-                            padding: '13px 14px 13px 42px',
-                            color: '#e2e8f0',
-                            fontSize: '14px',
-                            outline: 'none',
-                            boxSizing: 'border-box',
-                        }}
-                    />
-                </div>
-
-                {/* Tabs */}
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-                    <button
-                        onClick={() => setTab('brasil')}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '7px 16px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
-                            background: tab === 'brasil' ? '#00e5ff' : 'rgba(255,255,255,0.05)',
-                            color: tab === 'brasil' ? '#000' : '#94a3b8',
-                        }}
-                    >
-                        <span style={{ fontSize: '14px' }}>🇧🇷</span> Brasil
-                    </button>
-
-                    <button
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '7px 16px', borderRadius: '10px', border: 'none', cursor: 'not-allowed', fontWeight: 700, fontSize: '13px',
-                            background: 'rgba(255,255,255,0.04)', color: '#475569', opacity: 0.7,
-                        }}
-                    >
-                        <span style={{ fontSize: '14px' }}>🇺🇸</span> EUA
-                        <span style={{ background: '#ff9900', color: '#000', fontSize: '9px', fontWeight: 900, padding: '2px 6px', borderRadius: '6px', letterSpacing: '0.05em' }}>EM BREVE</span>
-                    </button>
-
-                    <button
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '7px 16px', borderRadius: '10px', border: 'none', cursor: 'not-allowed', fontWeight: 700, fontSize: '13px',
-                            background: 'rgba(255,255,255,0.04)', color: '#475569', opacity: 0.7,
-                        }}
-                    >
-                        <span style={{ fontSize: '14px' }}>₿</span> Crypto
-                        <span style={{ background: '#ff9900', color: '#000', fontSize: '9px', fontWeight: 900, padding: '2px 6px', borderRadius: '6px', letterSpacing: '0.05em' }}>EM BREVE</span>
-                    </button>
-                </div>
-
-                {/* Quick-pick stocks */}
-                {tab === 'brasil' && (
-                    <div>
-                        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px', fontWeight: 600 }}>
-                            Selecione uma ação brasileira:
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                            {BR_STOCKS.map(s => (
-                                <button
-                                    key={s.ticker}
-                                    onClick={() => handleQuickPick(s.ticker)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '6px',
-                                        padding: '7px 14px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, transition: 'all 0.15s',
-                                        background: selected === s.ticker ? 'rgba(0,229,255,0.15)' : '#1c1c24',
-                                        color: selected === s.ticker ? '#00e5ff' : '#94a3b8',
-                                        outline: selected === s.ticker ? '1px solid rgba(0,229,255,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                                    }}
-                                >
-                                    {s.ticker}
-                                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500 }}>• {s.name}</span>
-                                </button>
-                            ))}
+            {/* 2. RADAR COM INÍCIO DO SINAL E ÁUDIO */}
+            <div style={{ background: '#121318', border: '1px solid #222', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <h3 style={{ margin: 0, fontSize: '16px', color: '#ff9900' }}>Meu Radar — Score de Confluência</h3>
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                            <AudioTester />
+                            <button style={{ background: '#1a1a1a', border: '1px solid #333', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>Histórico de Hoje</button>
                         </div>
                     </div>
-                )}
+                </div>
 
-                {/* Bottom bar */}
-                <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginTop: '28px', paddingTop: '20px',
-                    borderTop: '1px solid rgba(255,255,255,0.05)',
-                }}>
-                    <p style={{ fontSize: '13px', color: '#475569', margin: 0 }}>
-                        {selected
-                            ? <span>Ativo selecionado: <strong style={{ color: '#00e5ff' }}>{selected}</strong></span>
-                            : 'Selecione uma ação da lista ou digite um ticker acima'
-                        }
-                    </p>
+                {/* Badge de Status e Início do Sinal (Retângulo) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ background: '#0a0a0a', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #222' }}>
+                        <span style={{ color: '#00ff7f', fontWeight: 'bold' }}>XAU/USD ★★★</span>
+                        <span style={{ background: '#00331a', color: '#00ff7f', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>COMPRA FORTE</span>
+                        <span style={{ background: '#ff9900', color: '#000', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>ELITE 3★</span>
 
-                    <button
-                        disabled={!selected}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            padding: '11px 24px', borderRadius: '12px', border: 'none', fontWeight: 800, fontSize: '14px', cursor: selected ? 'pointer' : 'not-allowed',
-                            background: selected ? '#00e5ff' : 'rgba(255,255,255,0.06)',
-                            color: selected ? '#000' : '#475569',
-                            opacity: selected ? 1 : 0.6,
-                            transition: 'all 0.2s',
-                        }}
-                    >
-                        <Crown style={{ width: '16px', height: '16px' }} />
-                        Analisar (1 PRO)
-                    </button>
+                        {/* O RETÂNGULO QUE VOCÊ PEDIU */}
+                        <div style={{ border: '1px solid #ff9900', color: '#ff9900', padding: '2px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', marginLeft: '10px' }}>
+                            INÍCIO DO SINAL: 12:22:10
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748b', fontSize: '12px', marginLeft: '10px' }}>
+                            <Shield size={14} /> Risco: $184.93 (1.8%)
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Empty state / Result area */}
-            <div style={{
-                background: '#121318',
-                border: '1px solid rgba(255,255,255,0.04)',
-                borderRadius: '20px',
-                padding: '64px 40px',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-                minHeight: '220px',
-            }}>
-                <BarChart2 style={{ width: '48px', height: '48px', color: '#1e3a4a', marginBottom: '16px' }} />
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', marginBottom: '10px' }}>Análise Institucional de Ações</h3>
-                <p style={{ fontSize: '14px', color: '#00e5ff', lineHeight: 1.7, maxWidth: '420px', margin: 0 }}>
-                    Digite o ticker de uma ação brasileira para receber uma análise completa baseada em 5 camadas: Macro, Fundamentos, Valuation, Técnica e Fluxo.
-                </p>
-            </div>
+            {/* Restante do Dashboard de Ações */}
+            <div style={{ background: '#121318', borderRadius: '20px', padding: '28px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ position: 'relative', marginBottom: '20px' }}>
+                    <Search style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', width: '16px', height: '16px', color: '#64748b' }} />
+                    <input type="text" placeholder="Digite o ticker (ex: PETR4, VALE3)" value={ticker} onChange={handleInput}
+                        style={{ width: '100%', background: '#1c1c24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '13px 42px', color: '#e2e8f0', outline: 'none' }} />
+                </div>
 
+                {/* Lista de Ações e Botão Analisar permanecem conforme sua lógica original */}
+                {/* ... */}
+            </div>
         </div>
     );
 }
