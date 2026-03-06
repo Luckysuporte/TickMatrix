@@ -77,6 +77,7 @@ type RadarItem = {
     error: boolean;
     flashing: boolean;
     lastUpdate: Date | null;
+    signalStartTime: Date | null;
     // valores brutos calculados pela API (entry ± ATR)
     entryRaw: number;
     stopLossRaw: number;
@@ -216,6 +217,7 @@ export default function SinaisIA() {
     const [showHistorico, setShowHistorico] = useState(true);
     const [loadingHistorico, setLoadingHistorico] = useState(false);
     const prevSignals = useRef<Record<string, string>>({});
+    const prevStarsMap = useRef<Record<string, number>>({}); 
     const signalTimes = useRef<Record<string, Date>>({}); // Birth time of the current signal
 
     // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
@@ -567,30 +569,34 @@ export default function SinaisIA() {
 
             const { stars, direction } = calcStars(m5, m15, h1);
             const oldSig = prevSignals.current[fav.value];
-            const changed = oldSig !== undefined && oldSig !== direction;
 
-            // Registrar nascimento do sinal para auditoria de delay
+            // Registrar nascimento do sinal (Timestamp de Virada)
             const now = new Date();
-            const signalBirth = signalTimes.current[fav.value] || now;
+            const oldStars = prevStarsMap.current[fav.value] || 0;
+            
+            // Condição de Virada: 
+            // 1. Mudou de NEUTRO para COMPRA/VENDA
+            // 2. Ou subiu de < 3 estrelas para 3 estrelas (Elite)
+            const isTurnaround = (direction !== 'NEUTRO') && (
+                (oldSig === 'NEUTRO' || oldSig === undefined) || 
+                (oldStars < 3 && stars === 3)
+            );
 
-            // Filtro de Sinais Fantasmas: Se o sinal vier do futuro (API drift), ajusta para agora
-            let birthDate = new Date(); // Fallback
-            if (direction !== 'NEUTRO' && oldSig !== direction) {
-                // Registrar nascimento
+            if (isTurnaround) {
                 signalTimes.current[fav.value] = now;
-                birthDate = now;
-            } else {
-                birthDate = signalBirth;
             }
 
-            // Se for um trade ativo hidratado ou novo, validamos o tempo
+            const birthDate = signalTimes.current[fav.value] || now;
+
+            // Filtro de Sinais Fantasmas: Se o sinal vier do futuro (API drift), ajusta para agora
             if (birthDate > now) {
-                console.warn(`[Radar] Ajustando sinal futuro de ${fav.value} para o presente.`);
-                birthDate = now;
                 signalTimes.current[fav.value] = now;
             }
 
             prevSignals.current[fav.value] = direction;
+            prevStarsMap.current[fav.value] = stars;
+
+            const changed = oldSig !== undefined && oldSig !== direction;
 
             const currentPriceRaw: number = m5Data.priceRaw ?? 0;
             const entryRaw: number = m5Data.entryRaw ?? currentPriceRaw;
@@ -744,6 +750,7 @@ export default function SinaisIA() {
                     error: false,
                     flashing: changed,
                     lastUpdate: new Date(),
+                    signalStartTime: signalTimes.current[fav.value] || null,
                     entryRaw,
                     stopLossRaw,
                     takeProfit1Raw,
@@ -1103,6 +1110,33 @@ export default function SinaisIA() {
                                             }}>
                                                 <AlertTriangle style={{ width: '10px', height: '10px' }} /> ELITE 3★
                                             </span>
+                                        )}
+
+                                        {/* Início do Sinal (Timestamp de Virada) */}
+                                        {item.signalStartTime && (
+                                            <div style={{
+                                                marginLeft: '8px', 
+                                                background: 'rgba(255,183,0,0.05)', 
+                                                border: '1px solid rgba(255,183,0,0.15)', 
+                                                borderRadius: '6px',
+                                                padding: '2px 12px', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px',
+                                                boxShadow: '0 0 10px rgba(0,0,0,0.2)'
+                                            }}>
+                                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#ffcc00', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Início do Sinal</span>
+                                                <span style={{ 
+                                                    fontSize: '13px', 
+                                                    fontWeight: 900, 
+                                                    color: '#fff', 
+                                                    fontFamily: 'monospace', 
+                                                    letterSpacing: '1px',
+                                                    textShadow: '0 0 5px rgba(0,0,0,0.5)'
+                                                }}>
+                                                    {item.signalStartTime.toLocaleTimeString('pt-BR', { hour12: false })}
+                                                </span>
+                                            </div>
                                         )}
 
                                         {item.loading && <span style={{ fontSize: '11px', color: '#475569' }}>Carregando...</span>}
