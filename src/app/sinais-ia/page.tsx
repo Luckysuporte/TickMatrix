@@ -227,9 +227,9 @@ export default function SinaisIA() {
     });
 
     // ── Gestão de Risco (Risk Management) ───────────────────────────────────
-    const [accountBalance, setAccountBalance] = useState(50000);
+    const [accountBalance, setAccountBalance] = useState(10000);
     const [riskPercentage, setRiskPercentage] = useState(1.0);
-    const [dailyDrawdown, setDailyDrawdown] = useState(500);
+    const [dailyDrawdownLimit, setDailyDrawdownLimit] = useState(500);
     const [lotSizeInput, setLotSizeInput] = useState(0.10);
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
@@ -467,7 +467,7 @@ export default function SinaisIA() {
         try {
             const { data } = await supabase
                 .from('trading_history')
-                .select('id, ativo, preco, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, resultado_pontos, pontos, open_time, close_time, signal_time, execution_time, stars_at_entry')
+                .select('id, ativo, preco, sinal_ia, entry_price, stop_loss, take_profit, take_profit_1, take_profit_2, take_profit_3, max_target, close_price, resultado, resultado_pontos, pontos, open_time, close_time, signal_time, execution_time, stars_at_entry, created_at, lucro_usd')
                 .order('created_at', { ascending: false })
                 .limit(50);
             setHistorico(data ?? []);
@@ -477,6 +477,28 @@ export default function SinaisIA() {
             setLoadingHistorico(false);
         }
     };
+
+    // Cálculo de P/L Diário (Hoje)
+    const dailyPnl = historico.reduce((acc, row) => {
+        if (row.resultado === 'ABERTO') return acc;
+        
+        // Verifica se é de hoje (UTC-3 / America/Sao_Paulo)
+        const d = new Date(String(row.created_at));
+        const now = new Date();
+        const isToday = d.getDate() === now.getDate() && 
+                        d.getMonth() === now.getMonth() && 
+                        d.getFullYear() === now.getFullYear();
+
+        if (isToday) {
+            // Se for STOP, lucro_usd deve ser negativo se não estiver salvo corretamente
+            // Mas assumimos que o banco já tem o valor correto ou calculamos se necessário
+            return acc + (Number(row.lucro_usd) || 0);
+        }
+        return acc;
+    }, 0);
+
+    const drawdownRestante = Math.max(0, dailyDrawdownLimit + dailyPnl);
+    const drawdownPercent = (drawdownRestante / dailyDrawdownLimit) * 100;
 
     // Subscrição Realtime e Load Inicial
     useEffect(() => {
@@ -983,6 +1005,45 @@ export default function SinaisIA() {
                                             }}>
                                                 ⚠️ falha na atualização
                                             </span>
+                                        )}
+
+                                        {/* Monitor de Risco Mesa Proprietária */}
+                                        {item.signal !== 'NEUTRO' && item.signal !== '—' && (
+                                            (() => {
+                                                const { tickValueUsd } = getTickConfig(item.asset.value);
+                                                const dist = Math.abs(item.entryRaw - item.stopLossRaw);
+                                                const riskUsd = dist * tickValueUsd * lotSizeInput;
+                                                const riskPct = (riskUsd / accountBalance) * 100;
+                                                const isHighRisk = riskPct > 2.5;
+
+                                                return (
+                                                    <div style={{
+                                                        marginLeft: '10px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                        padding: '2px 10px',
+                                                        borderRadius: '8px',
+                                                        background: isHighRisk ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                                                        border: `1px solid ${isHighRisk ? '#ef4444' : 'rgba(255,255,255,0.08)'}`,
+                                                        boxShadow: isHighRisk ? '0 0 15px rgba(239, 68, 68, 0.2)' : 'none',
+                                                        animation: isHighRisk ? 'pulseAlert 1.5s infinite' : 'none'
+                                                    }}>
+                                                        <style>{`
+                                                            @keyframes pulseAlert {
+                                                                0% { opacity: 1; }
+                                                                50% { opacity: 0.6; }
+                                                                100% { opacity: 1; }
+                                                            }
+                                                        `}</style>
+                                                        <ShieldCheck style={{ width: '12px', height: '12px', color: isHighRisk ? '#ef4444' : '#64748b' }} />
+                                                        <span style={{ fontSize: '11px', fontWeight: 800, color: isHighRisk ? '#ef4444' : '#94a3b8' }}>
+                                                            Risco: <span style={{ color: isHighRisk ? '#ef4444' : '#fff' }}>${riskUsd.toFixed(2)}</span> ({riskPct.toFixed(1)}%)
+                                                        </span>
+                                                        {isHighRisk && <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', marginLeft: '4px' }}>⚠️ RISCO ALTO</span>}
+                                                    </div>
+                                                );
+                                            })()
                                         )}
 
                                         <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
@@ -1579,8 +1640,8 @@ export default function SinaisIA() {
                         <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#f87171', fontSize: '13px' }}>$</span>
                         <input
                             type="number"
-                            value={dailyDrawdown}
-                            onChange={(e) => setDailyDrawdown(Number(e.target.value))}
+                            value={dailyDrawdownLimit}
+                            onChange={(e) => setDailyDrawdownLimit(Number(e.target.value))}
                             style={{
                                 width: '100%', background: '#0a0f16', border: '1px solid rgba(248,113,113,0.2)',
                                 borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#f87171', fontSize: '13px',
@@ -1605,6 +1666,31 @@ export default function SinaisIA() {
                             }}
                         />
                     </div>
+                </div>
+
+                {/* Barra de Vida - Drawdown Diário (Prop Firm) */}
+                <div style={{ width: '100%', marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: drawdownPercent > 20 ? '#00e676' : '#ef4444', boxShadow: drawdownPercent > 20 ? '0 0 10px #00e676' : '0 0 10px #ef4444' }} />
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#e2e8f0' }}>VIDA DIÁRIA (DRAWDOWN)</span>
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: drawdownPercent > 20 ? '#00e676' : '#ef4444' }}>
+                            ${drawdownRestante.toFixed(2)} / ${dailyDrawdownLimit.toFixed(2)}
+                        </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ 
+                            width: `${drawdownPercent}%`, 
+                            height: '100%', 
+                            background: `linear-gradient(90deg, ${drawdownPercent > 50 ? '#00e676' : drawdownPercent > 20 ? '#f59e0b' : '#ef4444'}, #00c853)`,
+                            transition: 'width 0.5s ease-out',
+                            boxShadow: '0 0 10px rgba(0,230,118,0.3)'
+                        }} />
+                    </div>
+                    <p style={{ fontSize: '10px', color: '#475569', marginTop: '6px', marginOuter: 0 }}>
+                        {dailyPnl >= 0 ? `Hoje: +$${dailyPnl.toFixed(2)} (Lucro)` : `Hoje: -$${Math.abs(dailyPnl).toFixed(2)} (Prejuízo)`}
+                    </p>
                 </div>
 
             </div>
