@@ -839,6 +839,115 @@ export default function SinaisIA() {
     return (
         <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 80px', fontFamily: 'inherit' }}>
 
+            {/* ── Dashboard de Gestão de Risco (Risk Management) ── */}
+            <div style={{
+                background: '#0d1117', border: '1px solid rgba(255,255,204,0.1)',
+                borderRadius: '16px', padding: '16px 24px', display: 'flex', flexWrap: 'wrap', gap: '20px',
+                marginBottom: '24px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                position: 'relative', overflow: 'hidden'
+            }}>
+                <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <ShieldCheck style={{ width: '16px', height: '16px', color: '#ffcc00' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#ffcc00' }}>Gestão de Risco Mesa Proprietária</span>
+                </div>
+
+                {/* Saldo da Conta */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Saldo da Conta ($)</label>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>$</span>
+                        <input
+                            type="number"
+                            value={accountBalance}
+                            onChange={(e) => setAccountBalance(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#fff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* Risco Máximo */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Risco por Operação (%)</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="number" step="0.1"
+                            value={riskPercentage}
+                            onChange={(e) => setRiskPercentage(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 24px 8px 12px', color: '#fff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                        <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>%</span>
+                    </div>
+                </div>
+
+                {/* Limite de Perda Diária */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Daily Drawdown Limit</label>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#f87171', fontSize: '13px' }}>$</span>
+                        <input
+                            type="number"
+                            value={dailyDrawdownLimit}
+                            onChange={(e) => setDailyDrawdownLimit(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(248,113,113,0.2)',
+                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#f87171', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* Lote Padrão */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Cálculo de TP (Lote)</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="number" step="0.01" min="0.01"
+                            value={lotSizeInput}
+                            onChange={(e) => setLotSizeInput(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 12px', color: '#00e5ff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* Barra de Vida - Drawdown Diário (Prop Firm) */}
+                <div style={{ width: '100%', marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: drawdownPercent > 20 ? '#00e676' : '#ef4444', boxShadow: drawdownPercent > 20 ? '0 0 10px #00e676' : '0 0 10px #ef4444' }} />
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#e2e8f0' }}>VIDA DIÁRIA (DRAWDOWN)</span>
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: drawdownPercent > 20 ? '#00e676' : '#ef4444' }}>
+                            ${drawdownRestante.toFixed(2)} / ${dailyDrawdownLimit.toFixed(2)}
+                        </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ 
+                            width: `${drawdownPercent}%`, 
+                            height: '100%', 
+                            background: `linear-gradient(90deg, ${drawdownPercent > 50 ? '#00e676' : drawdownPercent > 20 ? '#f59e0b' : '#ef4444'}, #00c853)`,
+                            transition: 'width 0.5s ease-out',
+                            boxShadow: '0 0 10px rgba(0,230,118,0.3)'
+                        }} />
+                    </div>
+                    <p style={{ fontSize: '10px', color: '#475569', marginTop: '6px', margin: 0 }}>
+                        {dailyPnl >= 0 ? `Hoje: +$${dailyPnl.toFixed(2)} (Lucro)` : `Hoje: -$${Math.abs(dailyPnl).toFixed(2)} (Prejuízo)`}
+                    </p>
+                </div>
+            </div>
+
             {/* ════════════════════════════════════════
                 MEU RADAR — Score de Confluência
             ════════════════════════════════════════ */}
@@ -1587,113 +1696,6 @@ export default function SinaisIA() {
                 </div>
             </div>
 
-            {/* ── Dashboard de Gestão de Risco (Risk Management) ── */}
-            <div style={{
-                background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)',
-                borderTop: 'none', padding: '16px 24px', display: 'flex', flexWrap: 'wrap', gap: '20px'
-            }}>
-                <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <ShieldCheck style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#e2e8f0' }}>Gestão de Risco da Conta</span>
-                </div>
-
-                {/* Saldo da Conta */}
-                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Saldo da Conta ($)</label>
-                    <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>$</span>
-                        <input
-                            type="number"
-                            value={accountBalance}
-                            onChange={(e) => setAccountBalance(Number(e.target.value))}
-                            style={{
-                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#fff', fontSize: '13px',
-                                outline: 'none'
-                            }}
-                        />
-                    </div>
-                </div>
-
-                {/* Risco Máximo */}
-                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Risco por Operação (%)</label>
-                    <div style={{ position: 'relative' }}>
-                        <input
-                            type="number" step="0.1"
-                            value={riskPercentage}
-                            onChange={(e) => setRiskPercentage(Number(e.target.value))}
-                            style={{
-                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '8px', padding: '8px 24px 8px 12px', color: '#fff', fontSize: '13px',
-                                outline: 'none'
-                            }}
-                        />
-                        <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8', fontSize: '13px' }}>%</span>
-                    </div>
-                </div>
-
-                {/* Limite de Perda Diária */}
-                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Daily Drawdown Limit</label>
-                    <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '12px', top: '10px', color: '#f87171', fontSize: '13px' }}>$</span>
-                        <input
-                            type="number"
-                            value={dailyDrawdownLimit}
-                            onChange={(e) => setDailyDrawdownLimit(Number(e.target.value))}
-                            style={{
-                                width: '100%', background: '#0a0f16', border: '1px solid rgba(248,113,113,0.2)',
-                                borderRadius: '8px', padding: '8px 12px 8px 24px', color: '#f87171', fontSize: '13px',
-                                outline: 'none'
-                            }}
-                        />
-                    </div>
-                </div>
-
-                {/* Lote Padrão */}
-                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Cálculo de TP (Lote)</label>
-                    <div style={{ position: 'relative' }}>
-                        <input
-                            type="number" step="0.01" min="0.01"
-                            value={lotSizeInput}
-                            onChange={(e) => setLotSizeInput(Number(e.target.value))}
-                            style={{
-                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '8px', padding: '8px 12px', color: '#00e5ff', fontSize: '13px',
-                                outline: 'none'
-                            }}
-                        />
-                    </div>
-                </div>
-
-                {/* Barra de Vida - Drawdown Diário (Prop Firm) */}
-                <div style={{ width: '100%', marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: drawdownPercent > 20 ? '#00e676' : '#ef4444', boxShadow: drawdownPercent > 20 ? '0 0 10px #00e676' : '0 0 10px #ef4444' }} />
-                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#e2e8f0' }}>VIDA DIÁRIA (DRAWDOWN)</span>
-                        </div>
-                        <span style={{ fontSize: '12px', fontWeight: 800, color: drawdownPercent > 20 ? '#00e676' : '#ef4444' }}>
-                            ${drawdownRestante.toFixed(2)} / ${dailyDrawdownLimit.toFixed(2)}
-                        </span>
-                    </div>
-                    <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ 
-                            width: `${drawdownPercent}%`, 
-                            height: '100%', 
-                            background: `linear-gradient(90deg, ${drawdownPercent > 50 ? '#00e676' : drawdownPercent > 20 ? '#f59e0b' : '#ef4444'}, #00c853)`,
-                            transition: 'width 0.5s ease-out',
-                            boxShadow: '0 0 10px rgba(0,230,118,0.3)'
-                        }} />
-                    </div>
-                    <p style={{ fontSize: '10px', color: '#475569', marginTop: '6px', marginOuter: 0 }}>
-                        {dailyPnl >= 0 ? `Hoje: +$${dailyPnl.toFixed(2)} (Lucro)` : `Hoje: -$${Math.abs(dailyPnl).toFixed(2)} (Prejuízo)`}
-                    </p>
-                </div>
-
-            </div>
 
             {/* ── Sinais Ativos ── */}
             <div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
