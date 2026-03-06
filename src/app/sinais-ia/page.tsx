@@ -219,7 +219,7 @@ export default function SinaisIA() {
     // Efeito para carregar o estado salvo (Sniper e Gestão de Risco)
     useEffect(() => {
         console.log('🚀 [TickMatrix] SinaisIA Component Loaded');
-        
+
         // Hidrata Sniper
         const savedActive = localStorage.getItem(LS_KEY_SNIPER_ACTIVE);
         if (savedActive !== null) setActive(savedActive === 'true');
@@ -248,6 +248,7 @@ export default function SinaisIA() {
     const prevSignals = useRef<Record<string, string>>({});
     const prevStarsMap = useRef<Record<string, number>>({});
     const signalTimes = useRef<Record<string, Date>>({}); // Birth time of the current signal
+    const lastUpdateMap = useRef<Record<string, number>>({}); // Cache para evitar chamadas excessivas (Twelve Data)
 
     // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
     const [activeFilters, setActiveFilters] = useState({
@@ -290,8 +291,15 @@ export default function SinaisIA() {
         } catch { return ALL_SNIPER_VALUES; }
     });
 
-    const persist = (selected: string[]) => {
-        try { localStorage.setItem(LS_KEY, JSON.stringify(selected)); } catch { /* ignore */ }
+    const persist = async (selected: string[]) => {
+        try { 
+            localStorage.setItem(LS_KEY, JSON.stringify(selected)); 
+            // Sincroniza com Supabase (Configuração Global)
+            await supabase.from('bot_settings').update({
+                moedas_ativas: selected,
+                updated_at: new Date().toISOString()
+            }).eq('id', 1);
+        } catch { /* ignore */ }
     };
     const persistCustom = (custom: { value: string; label: string; description: string }[]) => {
         try { localStorage.setItem(LS_KEY_CUSTOM, JSON.stringify(custom)); } catch { /* ignore */ }
@@ -375,17 +383,37 @@ export default function SinaisIA() {
         hydrateTrades();
     }, []);
 
-    // ── Sincronização do Toggle com o Supabase ───────────────────────────────
+    // ── Sincronização do Toggle e Moedas com o Supabase (bot_settings) ────────
     useEffect(() => {
         (async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-            const { data } = await supabase
-                .from('profiles')
-                .select('is_radar_active')
-                .eq('id', user.id)
-                .single();
-            if (data) setActive(data.is_radar_active ?? false);
+            try {
+                // Busca as configurações globais do bot
+                const { data: botSettings, error } = await supabase
+                    .from('bot_settings')
+                    .select('*')
+                    .single();
+
+                if (botSettings) {
+                    console.log('📦 [bot_settings] Dados carregados:', botSettings);
+                    setActive(botSettings.is_sniper_active ?? false);
+                    localStorage.setItem(LS_KEY_SNIPER_ACTIVE, String(botSettings.is_sniper_active));
+                    
+                    if (botSettings.moedas_ativas && Array.isArray(botSettings.moedas_ativas)) {
+                        setSelectedSignalAssets(botSettings.moedas_ativas);
+                        localStorage.setItem(LS_KEY, JSON.stringify(botSettings.moedas_ativas));
+                    }
+                } else if (error && error.code === 'PGRST116') {
+                    console.log('📦 [bot_settings] Registro não encontrado, criando padrão...');
+                    await supabase.from('bot_settings').insert({
+                        id: 1,
+                        is_sniper_active: true, // Começar ativado por padrão conforme pedido do Erik
+                        moedas_ativas: ALL_SNIPER_VALUES
+                    });
+                    setActive(true);
+                }
+            } catch (err) {
+                console.error('[Supabase] Falha ao carregar bot_settings:', err);
+            }
         })();
     }, []);
 
@@ -396,6 +424,12 @@ export default function SinaisIA() {
         setActive(next); // optimistic update
         localStorage.setItem(LS_KEY_SNIPER_ACTIVE, String(next));
         try {
+            // Salva na bot_settings (Configuração Global do Sniper)
+            await supabase.from('bot_settings').update({
+                is_sniper_active: next,
+                updated_at: new Date().toISOString()
+            }).eq('id', 1); // Assumindo ID 1 como o registro único de config
+
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 await supabase.from('profiles').upsert({
@@ -535,7 +569,8 @@ export default function SinaisIA() {
             if (!pnlUsd && pnlUsd !== 0) {
                 const pts = Number(row.resultado_pontos ?? row.pontos ?? 0);
                 const cfg = getTickConfig(String(row.ativo));
-                pnlUsd = (pts / (cfg as any).tickSize) * cfg.tickValueUsd * lotSizeInput;
+                // Correção do erro ts(2339) para garantir somatória do lucro 515.34
+                pnlUsd = (pts / (cfg as any).tickSize) * (cfg as any).tickValue * lotSizeInput;
             }
             return acc + (pnlUsd || 0);
         }
@@ -803,6 +838,8 @@ export default function SinaisIA() {
                 },
             }));
 
+            lastUpdateMap.current[fav.value] = Date.now();
+
             if (changed) {
                 setTimeout(() => setRadarData(prev => ({ ...prev, [fav.value]: { ...prev[fav.value], flashing: false } })), 2500);
             }
@@ -854,23 +891,40 @@ export default function SinaisIA() {
     };
 
     useEffect(() => {
-        if (favorites.length === 0) return;
+        if (favorites.length === 0 || !active) return;
+        
+        // Watchdog de 10s
+        const watchdog = setInterval(async () => {
+            console.log(`⏱ Watchdog Check: ${new Date().toLocaleTimeString()}`);
+            
+            for (const fav of favorites) {
+                try {
+                    console.log(`🔎 Analisando: [${fav.value}]`);
+                    
+                    // Sistema de Cache: Só consulta API se o último update tiver > 60s
+                    const now = Date.now();
+                    const lastUp = lastUpdateMap.current[fav.value] || 0;
+                    
+                    if (now - lastUp < 60000) {
+                        continue; 
+                    }
+
+                    await fetchOne(fav);
+                    
+                } catch (err) {
+                    console.error(`❌ Erro no monitoramento de ${fav.value}:`, err);
+                    continue; // Garante que o loop não trave
+                }
+            }
+        }, 10000);
+
+        // Chamada inicial
         fetchAll(favorites);
         setCountdown(120);
 
-        let counter = 120;
-        const tick = setInterval(() => {
-            counter -= 1;
-            setCountdown(counter);
-            if (counter <= 0) {
-                counter = 120;
-                setCountdown(120);
-                fetchAll(favorites);
-            }
-        }, 1000);
-        return () => clearInterval(tick);
+        return () => clearInterval(watchdog);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [favorites, activeFilters]);
+    }, [favorites, active, activeFilters]);
 
     const rowBg = (positive: boolean, badge: string) => {
         if (badge === 'Stop') return 'rgba(255,61,0,0.06)';
