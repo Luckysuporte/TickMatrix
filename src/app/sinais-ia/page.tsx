@@ -2000,6 +2000,66 @@ export default function SinaisIA() {
                 )
             }
 
-        </div >
+            {/* ════════════════════════════════════════
+                BOTÃO FLUTUANTE DE TESTE (ÁUDIO)
+                ════════════════════════════════════════ */}
+            <div
+                onClick={() => {
+                    setAudioUnlocked(true);
+                    playAlert(3, 'buy');
+                }}
+                style={{
+                    position: 'fixed',
+                    bottom: '30px',
+                    right: '30px',
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #00e676, #00c853)',
+                    boxShadow: '0 0 20px rgba(0, 230, 118, 0.5), 0 0 40px rgba(0, 230, 118, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    zIndex: 9999,
+                    transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    border: '3px solid rgba(255, 255, 255, 0.2)',
+                }}
+                onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'scale(1.15) rotate(10deg)';
+                    e.currentTarget.style.boxShadow = '0 0 30px rgba(0, 230, 118, 0.8), 0 0 60px rgba(0, 230, 118, 0.4)';
+                }}
+                onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'scale(1) rotate(0deg)';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(0, 230, 118, 0.5), 0 0 40px rgba(0, 230, 118, 0.2)';
+                }}
+            >
+                <div style={{
+                    fontSize: '28px',
+                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+                }}>🔊</div>
+                
+                {/* Tooltip opcional */}
+                <div style={{
+                    position: 'absolute',
+                    top: '-45px',
+                    right: '0',
+                    background: '#000',
+                    color: '#00e676',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    whiteSpace: 'nowrap',
+                    border: '1px solid #00e676',
+                    pointerEvents: 'none',
+                    opacity: audioUnlocked ? 0 : 1,
+                    transition: 'opacity 0.3s'
+                }}>
+                    Aperte para liberar o som! 👈
+                </div>
+            </div>
+
+        </div>
     );
 }
