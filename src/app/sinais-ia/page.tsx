@@ -574,11 +574,6 @@ export default function SinaisIA() {
             // se pts for muito diferente da distância real, o lucro_usd no banco deveria ser usado.
             // Mas aqui, usamos a fórmula do riskCalc:
             pnlUsd = pts * lotSizeInput * tickValueUsd;
-            
-            // Ajuste de escala específico para XAU/USD se os pts no banco virem em pips
-            if (sym.includes('XAU') && pts > 100) {
-                pnlUsd = (pts / 100) * lotSizeInput * tickValueUsd;
-            }
         }
         return acc + (pnlUsd || 0);
     }, 0);
@@ -1770,13 +1765,13 @@ export default function SinaisIA() {
                                     const sym = String(r.ativo);
                                     const { tickValueUsd } = getTickConfig(sym);
                                     
-                                    // Cálculo base: (Variação de Preço) * Lote * tickValueUsd
-                                    // No Ouro (XAU), se ptsRaw estiver em 'pips' (ex: 30), dividimos por 100 para pegar variação real ($0.30)
-                                    const multiplier = (sym.includes('XAU') && ptsRaw > 100) ? 0.01 : 1;
-                                    pnlUsd = ptsRaw * multiplier * lotSizeInput * tickValueUsd;
+                                    // Cálculo Blindado: (Variação de Preço) * Lote * Valor do Ponto
+                                    // Sem divisões dinâmicas ou chutes de escala.
+                                    pnlUsd = ptsRaw * lotSizeInput * tickValueUsd;
                                 }
 
-                                const timeRaw = r.close_time || r.open_time || r.execution_time || r.signal_time || r.created_at;
+                                // Prioriza o horário do sinal original para o histórico fazer sentido
+                                const timeRaw = r.signal_time || r.open_time || r.execution_time || r.close_time || r.created_at;
                                             const timeStr = timeRaw ? formatBRT(timeRaw as string) : '—';
 
                                             // Cálculo de delay
@@ -2048,7 +2043,8 @@ export default function SinaisIA() {
                             }
                         }
 
-                        const timeRaw = sig.close_time || sig.open_time || sig.execution_time || sig.signal_time || sig.created_at;
+                        // Prioriza o horário em que o sinal foi detectado (15:03 no caso do Erik)
+                        const timeRaw = sig.signal_time || sig.open_time || sig.execution_time || sig.close_time || sig.created_at;
                         const timeStr = timeRaw ? formatBRT(timeRaw as string) : '—';
 
                         const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
