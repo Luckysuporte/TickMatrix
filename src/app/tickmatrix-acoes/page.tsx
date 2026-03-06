@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Search, Crown, BarChart2 } from 'lucide-react';
+import AudioTester from '@/components/AudioTester';
 
 // ─── Quick-pick stocks ────────────────────────────────────────────────────────
 const BR_STOCKS = [
@@ -35,6 +36,11 @@ export default function TickMatrixAcoes() {
 
     return (
         <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px 80px' }}>
+
+            {/* Botão de Som para liberação de áudio do Sniper */}
+            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                <AudioTester />
+            </div>
 
             {/* PRO Banner */}
             <div style={{
@@ -95,7 +101,6 @@ export default function TickMatrixAcoes() {
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-                    {/* Brasil */}
                     <button
                         onClick={() => setTab('brasil')}
                         style={{
@@ -108,7 +113,6 @@ export default function TickMatrixAcoes() {
                         <span style={{ fontSize: '14px' }}>🇧🇷</span> Brasil
                     </button>
 
-                    {/* EUA */}
                     <button
                         style={{
                             display: 'flex', alignItems: 'center', gap: '6px',
@@ -120,7 +124,6 @@ export default function TickMatrixAcoes() {
                         <span style={{ background: '#ff9900', color: '#000', fontSize: '9px', fontWeight: 900, padding: '2px 6px', borderRadius: '6px', letterSpacing: '0.05em' }}>EM BREVE</span>
                     </button>
 
-                    {/* Crypto */}
                     <button
                         style={{
                             display: 'flex', alignItems: 'center', gap: '6px',

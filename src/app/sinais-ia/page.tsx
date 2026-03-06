@@ -168,6 +168,12 @@ const formatBRT = (date: Date | string | null, includeSeconds = true) => {
     });
 };
 
+const fmt = (val: number | string | undefined | null) => {
+    if (val === undefined || val === null) return '—';
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    return isNaN(num) ? '—' : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const sigColor = (sig: string) =>
     sig === 'COMPRA' ? '#00e676' : sig === 'VENDA' ? '#ef4444' : '#64748b';
@@ -1370,6 +1376,7 @@ export default function SinaisIA() {
                                     const isOpen = trade.status === 'ACOMPANHANDO';
                                     const isGain = trade.status === 'GAIN';
                                     const accentColor = isOpen ? '#00e5ff' : isGain ? '#00e676' : '#ef4444';
+                                    const dirColor = trade.direction === 'COMPRA' ? '#00e676' : '#ef4444';
                                     return (
                                         <tr key={trade.id} style={{
                                             borderBottom: '1px solid rgba(255,255,255,0.03)',
