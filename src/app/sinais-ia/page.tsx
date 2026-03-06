@@ -150,6 +150,18 @@ function calcStars(m5: TFData | null, m15: TFData | null, h1: TFData | null): { 
     return { stars: count, direction: base };
 }
 
+// ─── Timezone BRT Helper ──────────────────────────────────────────────────
+const formatBRT = (date: Date | string | null, includeSeconds = true) => {
+    if (!date) return '—';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: includeSeconds ? '2-digit' : undefined,
+        timeZone: 'America/Sao_Paulo'
+    });
+};
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const sigColor = (sig: string) =>
     sig === 'COMPRA' ? '#00e676' : sig === 'VENDA' ? '#ef4444' : '#64748b';
@@ -526,8 +538,24 @@ export default function SinaisIA() {
             const changed = oldSig !== undefined && oldSig !== direction;
 
             // Registrar nascimento do sinal para auditoria de delay
+            const now = new Date();
+            const signalBirth = signalTimes.current[fav.value] || now;
+
+            // Filtro de Sinais Fantasmas: Se o sinal vier do futuro (API drift), ajusta para agora
+            let birthDate = new Date(); // Fallback
             if (direction !== 'NEUTRO' && oldSig !== direction) {
-                signalTimes.current[fav.value] = new Date();
+                // Registrar nascimento
+                signalTimes.current[fav.value] = now;
+                birthDate = now;
+            } else {
+                birthDate = signalBirth;
+            }
+
+            // Se for um trade ativo hidratado ou novo, validamos o tempo
+            if (birthDate > now) {
+                console.warn(`[Radar] Ajustando sinal futuro de ${fav.value} para o presente.`);
+                birthDate = now;
+                signalTimes.current[fav.value] = now;
             }
 
             prevSignals.current[fav.value] = direction;
@@ -947,7 +975,6 @@ export default function SinaisIA() {
                                             </span>
                                         )}
 
-                                        {/* Horário atualização / Gerado */}
                                         <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                                             {(() => {
                                                 const at = activeTrades.find(t => t.asset === item.asset.value && t.status === 'ACOMPANHANDO');
@@ -955,14 +982,14 @@ export default function SinaisIA() {
                                                     return (
                                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                                                             <div>
-                                                                <div style={{ fontSize: '10px', color: '#00e5ff', fontWeight: 700 }}>⏱ Gerado {at.openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                                                <div style={{ fontSize: '10px', color: '#00e5ff', fontWeight: 700 }}>⏱ Gerado {formatBRT(at.openTime)}</div>
                                                                 <div style={{ fontSize: '9px', color: '#64748b' }}>Sinal em andamento...</div>
                                                             </div>
                                                         </div>
                                                     );
                                                 }
                                                 return <span style={{ fontSize: '10px', color: '#334155' }}>
-                                                    {item.lastUpdate?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'}
+                                                    {formatBRT(item.lastUpdate)}
                                                 </span>;
                                             })()}
                                         </div>
@@ -1129,16 +1156,12 @@ export default function SinaisIA() {
                                     const isOpen = trade.status === 'ACOMPANHANDO';
                                     const isGain = trade.status === 'GAIN';
                                     const accentColor = isOpen ? '#00e5ff' : isGain ? '#00e676' : '#ef4444';
-                                    const timeStr = trade.openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                                    const dirColor = trade.direction === 'COMPRA' ? '#00e676' : '#ef4444';
-                                    const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
-
                                     return (
                                         <tr key={trade.id} style={{
                                             borderBottom: '1px solid rgba(255,255,255,0.03)',
                                             background: isOpen ? 'rgba(0,229,255,0.02)' : 'transparent'
                                         }}>
-                                            <td style={{ padding: '12px 24px', fontFamily: 'monospace', color: '#64748b', whiteSpace: 'nowrap' }}>⏱ {timeStr}</td>
+                                            <td style={{ padding: '12px 24px', fontFamily: 'monospace', color: '#64748b', whiteSpace: 'nowrap' }}>⏱ {formatBRT(trade.openTime)}</td>
                                             <td style={{ padding: '12px 24px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     <span style={{ fontWeight: 800, color: '#fff' }}>{trade.asset}</span>
@@ -1318,9 +1341,7 @@ export default function SinaisIA() {
                                             const isAberto = res === 'ABERTO';
                                             const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
                                             const fmt = (v: unknown) => v != null ? Number(v).toFixed(Number(v) > 100 ? 2 : 4) : '—';
-                                            const timeStr = r.open_time
-                                                ? new Date(String(r.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                                                : '—';
+                                            const timeStr = formatBRT(r.open_time as string);
 
                                             // Cálculo de delay
                                             let delayStr = '—';
