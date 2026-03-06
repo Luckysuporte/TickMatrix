@@ -569,16 +569,15 @@ export default function SinaisIA() {
             const sym = String(row.ativo);
             const { tickValueUsd } = getTickConfig(sym);
             
-            // Se for XAU/USD, o "pts" do banco pode estar em escala errada.
-            // Vamos normalizar: pts no banco para XAU costumam vir multiplicados por 100/1000
-            // Lucro = (Variação de Preço) * Lote * tickValueUsd
-            // Aqui, assumimos que 'pts' reflete a variação bruta se não houver lucro_usd
-            pnlUsd = pts * lotSizeInput * (tickValueUsd / 100); 
+            // Fórmula padrão: Variação de Preço (pts) * Lote * Valor por Ponto
+            // Para compensar a escala do Ouro no banco (onde 9.34 pts podem vir como 30),
+            // se pts for muito diferente da distância real, o lucro_usd no banco deveria ser usado.
+            // Mas aqui, usamos a fórmula do riskCalc:
+            pnlUsd = pts * lotSizeInput * tickValueUsd;
             
-            // Ajuste específico para garantir que os $466-$600 apareçam:
-            if (sym.includes('XAU')) {
-                // Se o lucro parece muito baixo (ex: 30 pts virando $15), corrigimos a escala
-                if (pnlUsd < pts) pnlUsd = pts * lotSizeInput * 2; // Ajuste empírico para B3/Forex Gold
+            // Ajuste de escala específico para XAU/USD se os pts no banco virem em pips
+            if (sym.includes('XAU') && pts > 100) {
+                pnlUsd = (pts / 100) * lotSizeInput * tickValueUsd;
             }
         }
         return acc + (pnlUsd || 0);
@@ -1768,8 +1767,14 @@ export default function SinaisIA() {
                                 let pnlUsd = Number(r.lucro_usd);
                                 if (!pnlUsd && pnlUsd !== 0) {
                                     const pts = Number(r.resultado_pontos ?? r.pontos ?? 0);
-                                    const cfg = getTickConfig(String(r.ativo));
-                                    pnlUsd = (pts / (cfg as any).tickSize) * (cfg as any).tickValue * lotSizeInput;
+                                    const sym = String(r.ativo);
+                                    const { tickValueUsd } = getTickConfig(sym);
+                                    
+                                    pnlUsd = pts * lotSizeInput * tickValueUsd;
+                                    
+                                    if (sym.includes('XAU') && pts > 100) {
+                                        pnlUsd = (pts / 100) * lotSizeInput * tickValueUsd;
+                                    }
                                 }
 
                                 const timeRaw = r.close_time || r.open_time || r.execution_time || r.signal_time || r.created_at;
