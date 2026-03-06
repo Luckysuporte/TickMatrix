@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: 'Motor algorítmico de análise de mercado financeiro',
 };
 
+import AudioTester from '@/components/AudioTester';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,6 +35,7 @@ export default function RootLayout({
           <main className="pt-8 pb-12">
             {children}
           </main>
+          <AudioTester />
         </div>
       </body>
     </html>
