@@ -499,9 +499,14 @@ export default function SinaisIA() {
             d.getFullYear() === now.getFullYear();
 
         if (isToday) {
-            // Se for STOP, lucro_usd deve ser negativo se não estiver salvo corretamente
-            // Mas assumimos que o banco já tem o valor correto ou calculamos se necessário
-            return acc + (Number(row.lucro_usd) || 0);
+            let pnlUsd = Number(row.lucro_usd);
+            // Se lucro_usd não está no banco, calcula a partir dos pontos (retropatibilidade)
+            if (!pnlUsd && pnlUsd !== 0) {
+                const pts = Number(row.resultado_pontos ?? row.pontos ?? 0);
+                const cfg = getTickConfig(String(row.ativo));
+                pnlUsd = (pts / (cfg as any).tickSize) * cfg.tickValueUsd * lotSizeInput;
+            }
+            return acc + (pnlUsd || 0);
         }
         return acc;
     }, 0);
@@ -1582,7 +1587,8 @@ export default function SinaisIA() {
                                             const isAberto = res === 'ABERTO';
                                             const resColor = isGain ? '#00e676' : isStop ? '#ef4444' : '#64748b';
                                             const fmt = (v: unknown) => v != null ? Number(v).toFixed(Number(v) > 100 ? 2 : 4) : '—';
-                                            const timeStr = formatBRT(r.open_time as string);
+                                            const timeRaw = r.close_time || r.open_time || r.execution_time || r.signal_time || r.created_at;
+                                            const timeStr = timeRaw ? formatBRT(timeRaw as string) : '—';
 
                                             // Cálculo de delay
                                             let delayStr = '—';
@@ -1590,12 +1596,19 @@ export default function SinaisIA() {
                                             if (r.signal_time && r.execution_time) {
                                                 const sT = new Date(String(r.signal_time)).getTime();
                                                 const eT = new Date(String(r.execution_time)).getTime();
-                                                const diffMs = Math.max(0, eT - sT);
-                                                delaySecs = diffMs / 1000;
+                                                if (!isNaN(sT) && !isNaN(eT)) {
+                                                    const diffMs = Math.max(0, eT - sT);
+                                                    delaySecs = diffMs / 1000;
 
-                                                const m = Math.floor(delaySecs / 60);
-                                                const s = Math.floor(delaySecs % 60);
-                                                delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
+                                                    const m = Math.floor(delaySecs / 60);
+                                                    const s = Math.floor(delaySecs % 60);
+                                                    delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
+                                                } else if (r.atraso != null) {
+                                                    delaySecs = Number(r.atraso);
+                                                    const m = Math.floor(delaySecs / 60);
+                                                    const s = Math.floor(delaySecs % 60);
+                                                    delayStr = m > 0 ? `+${m}m ${s}s` : `+${s}s`;
+                                                }
                                             } else if (r.atraso != null) {
                                                 delaySecs = Number(r.atraso);
                                                 const m = Math.floor(delaySecs / 60);
@@ -1836,13 +1849,26 @@ export default function SinaisIA() {
                         const asset = String(sig.ativo ?? '???');
                         const entry = Number(sig.entry_price ?? sig.preco ?? 0);
                         const sl = Number(sig.stop_loss ?? 0);
-                        const tp1 = Number(sig.take_profit_1 ?? 0);
-                        const tp2 = Number(sig.take_profit_2 ?? 0);
-                        const tp3 = Number(sig.take_profit_3 ?? 0);
+                        let tp1 = Number(sig.take_profit_1 ?? 0);
+                        let tp2 = Number(sig.take_profit_2 ?? 0);
+                        let tp3 = Number(sig.take_profit_3 ?? 0);
 
-                        const timeStr = sig.open_time
-                            ? new Date(String(sig.open_time)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                            : '—';
+                        // Fallback calculando dinamicamente alvos antigos que foram zerados
+                        if (!tp1 && !tp2 && !tp3 && entry > 0 && sl > 0) {
+                            const diff = Math.abs(entry - sl);
+                            if (isBuy) {
+                                tp1 = entry + diff;
+                                tp2 = entry + diff * 2;
+                                tp3 = entry + diff * 3;
+                            } else {
+                                tp1 = entry - diff;
+                                tp2 = entry - diff * 2;
+                                tp3 = entry - diff * 3;
+                            }
+                        }
+
+                        const timeRaw = sig.close_time || sig.open_time || sig.execution_time || sig.signal_time || sig.created_at;
+                        const timeStr = timeRaw ? formatBRT(timeRaw as string) : '—';
 
                         const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
 
@@ -1869,7 +1895,7 @@ export default function SinaisIA() {
                                     <div style={{ textAlign: 'right' }}>
                                         <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
                                         <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
-                                            {sig.resultado_pontos != null ? `${Number(sig.resultado_pontos) >= 0 ? '+' : ''}${fmt(Number(sig.resultado_pontos))} pts` : '--'}
+                                            {(sig.resultado_pontos ?? sig.pontos) != null ? `${Number(sig.resultado_pontos ?? sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.resultado_pontos ?? sig.pontos))} pts` : '--'}
                                         </p>
                                     </div>                              </div>
 
