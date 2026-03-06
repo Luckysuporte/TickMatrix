@@ -6,7 +6,7 @@ export type LotCalcResult =
 // ─── Tabela de Tick Values ────────────────────────────────────────────────
 // Valor em USD de 1.0 de movimento absoluto no preço, POR 1 contrato/lote.
 // Ex: MNQ — se o preço muda de 15000 para 15001, o P/L é $2.00 por contrato.
-function getTickConfig(sym: string): { tickValueUsd: number; isFuture: boolean } {
+export function getTickConfig(sym: string): { tickValueUsd: number; isFuture: boolean } {
     const s = sym.toUpperCase().replace('/', '');
 
     // ── Futuros CME (contratos inteiros) ───────────────────────────────────
@@ -72,4 +72,11 @@ export function calculateSuggestedLot(
     const displayLine = `Lote Recomendado: ${lotLabel} | Risco Total: $${riskAmountUsd.toFixed(2)}`;
 
     return { valid: true, lotSize, lotLabel, unitLabel, riskAmountUsd, displayLine };
+}
+
+export function calculateTargetProfit(lotSize: number, entryPrice: number, targetPrice: number, assetSymbol: string): number {
+    if (!targetPrice || targetPrice <= 0) return 0;
+    const distance = Math.abs(entryPrice - targetPrice);
+    const { tickValueUsd } = getTickConfig(assetSymbol);
+    return lotSize * distance * tickValueUsd;
 }

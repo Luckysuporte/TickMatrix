@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, AlertTriangle, Settings, X, Check, ShieldCheck } from 'lucide-react';
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
-import { calculateSuggestedLot } from '@/lib/riskCalc';
+import { calculateSuggestedLot, calculateTargetProfit } from '@/lib/riskCalc';
 import { supabase } from '@/lib/supabase';
 
 // ─── Sinais Recentes — mock demonstrativo XAU/USD ─────────
@@ -80,6 +80,9 @@ type RadarItem = {
     // valores brutos calculados pela API (entry ± ATR)
     entryRaw: number;
     stopLossRaw: number;
+    takeProfit1Raw: number;
+    takeProfit2Raw: number;
+    takeProfit3Raw: number;
     takeProfitRaw: number;
 };
 
@@ -206,6 +209,7 @@ export default function SinaisIA() {
     const [accountBalance, setAccountBalance] = useState(50000);
     const [riskPercentage, setRiskPercentage] = useState(1.0);
     const [dailyDrawdown, setDailyDrawdown] = useState(500);
+    const [lotSizeInput, setLotSizeInput] = useState(0.10);
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [filterOpen, setFilterOpen] = useState(false);
@@ -463,11 +467,14 @@ export default function SinaisIA() {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'trading_history' },
-                () => {
+                (payload) => {
+                    console.log('[Realtime] Mudança detectada no banco:', payload);
                     fetchHistorico();
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log('[Realtime] Status da inscrição:', status);
+            });
 
         return () => {
             supabase.removeChannel(channel);
@@ -485,12 +492,12 @@ export default function SinaisIA() {
                 ? historico.find(h => (h as any).id === trade.supabaseId)
                 : historico.find(h => {
                     const r = h as Record<string, unknown>;
-                    return r.ativo === trade.asset && String(r.resultado).toUpperCase() !== 'ABERTO';
+                    return r.ativo === trade.asset && String(r.resultado).trim().toUpperCase() !== 'ABERTO';
                 });
 
             // Se achou um registro do mesmo ativo não aberto (fechado recentemente por sql ou ui), retira do local log.
             if (dbRef) {
-                const isAbertoDb = String((dbRef as any).resultado).toUpperCase() === 'ABERTO';
+                const isAbertoDb = String((dbRef as any).resultado).trim().toUpperCase() === 'ABERTO';
                 if (!isAbertoDb) {
                     // Forcar UI a dropar se o banco considera fechado (GAIN/STOP/BREAKEVEN)
                     return false;
@@ -681,6 +688,9 @@ export default function SinaisIA() {
                     lastUpdate: new Date(),
                     entryRaw,
                     stopLossRaw,
+                    takeProfit1Raw,
+                    takeProfit2Raw,
+                    takeProfit3Raw,
                     takeProfitRaw,
                 },
             }));
@@ -701,7 +711,7 @@ export default function SinaisIA() {
                         asset: fav, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
-                        entryRaw: 0, stopLossRaw: 0, takeProfitRaw: 0,
+                        entryRaw: 0, stopLossRaw: 0, takeProfit1Raw: 0, takeProfit2Raw: 0, takeProfit3Raw: 0, takeProfitRaw: 0,
                     }),
                     loading: false,
                     error: false, // silencioso — dados anteriores ficam na tela
@@ -720,7 +730,7 @@ export default function SinaisIA() {
                         asset: f, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
-                        entryRaw: 0, stopLossRaw: 0, takeProfitRaw: 0,
+                        entryRaw: 0, stopLossRaw: 0, takeProfit1Raw: 0, takeProfit2Raw: 0, takeProfit3Raw: 0, takeProfitRaw: 0,
                     }),
                     loading: true, error: false,
                 };
@@ -1020,24 +1030,42 @@ export default function SinaisIA() {
 
                                     {/* Linha 3: Dimensionamento da Posição — dados reais da API (entry ± ATR) */}
                                     {!item.loading && item.stopLossRaw > 0 && (
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <ShieldCheck style={{ width: '12px', height: '12px', color: '#00e5ff' }} />
-                                                <span style={{ fontSize: '10px', color: '#64748b' }}>Dimensionamento da Posição</span>
-                                                <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>
-                                                    SL {item.signal === 'COMPRA' ? '+' : '-'}{Math.abs(item.entryRaw - item.stopLossRaw).toFixed(item.stopLossRaw > 100 ? 2 : 4)} pts
-                                                </span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <ShieldCheck style={{ width: '12px', height: '12px', color: '#00e5ff' }} />
+                                                    <span style={{ fontSize: '10px', color: '#64748b' }}>Dimensionamento da Posição</span>
+                                                    <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>
+                                                        SL {item.signal === 'COMPRA' ? '+' : '-'}{Math.abs(item.entryRaw - item.stopLossRaw).toFixed(item.stopLossRaw > 100 ? 2 : 4)} pts
+                                                    </span>
+                                                </div>
+                                                {(() => {
+                                                    const calc = calculateSuggestedLot(accountBalance, riskPercentage, item.entryRaw, item.stopLossRaw, item.asset.value);
+                                                    if (!calc.valid) {
+                                                        return <span style={{ fontSize: '10px', color: '#64748b' }}>⏳ {calc.message}</span>;
+                                                    }
+                                                    return (
+                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '3px 10px', borderRadius: '6px' }}>
+                                                            <span style={{ color: '#00e5ff' }}>{calc.lotLabel}</span>
+                                                            <span style={{ color: '#475569', margin: '0 4px' }}>|</span>
+                                                            <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                             {(() => {
-                                                const calc = calculateSuggestedLot(accountBalance, riskPercentage, item.entryRaw, item.stopLossRaw, item.asset.value);
-                                                if (!calc.valid) {
-                                                    return <span style={{ fontSize: '10px', color: '#64748b' }}>⏳ {calc.message}</span>;
-                                                }
+                                                const tp1Profit = calculateTargetProfit(lotSizeInput, item.entryRaw, item.takeProfit1Raw, item.asset.value);
+                                                const tp2Profit = calculateTargetProfit(lotSizeInput, item.entryRaw, item.takeProfit2Raw, item.asset.value);
+                                                const tp3Profit = calculateTargetProfit(lotSizeInput, item.entryRaw, item.takeProfit3Raw, item.asset.value);
+
+                                                if (!tp1Profit) return null;
+
                                                 return (
-                                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#e2e8f0', background: 'rgba(255,255,255,0.05)', padding: '3px 10px', borderRadius: '6px' }}>
-                                                        <span style={{ color: '#00e5ff' }}>{calc.lotLabel}</span>
-                                                        <span style={{ color: '#475569', margin: '0 4px' }}>|</span>
-                                                        <span style={{ color: '#f87171' }}>${calc.riskAmountUsd.toFixed(2)}</span>
+                                                    <div style={{ display: 'flex', gap: '6px', fontSize: '10px', color: '#94a3b8' }}>
+                                                        <span style={{ background: 'rgba(0,230,118,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,230,118,0.1)' }}>TP1: <strong style={{ color: '#00e676' }}>${tp1Profit.toFixed(2)}</strong></span>
+                                                        <span style={{ background: 'rgba(0,230,118,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,230,118,0.1)' }}>TP2: <strong style={{ color: '#00e676' }}>${tp2Profit.toFixed(2)}</strong></span>
+                                                        <span style={{ background: 'rgba(0,230,118,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,230,118,0.1)' }}>TP3: <strong style={{ color: '#00e676' }}>${tp3Profit.toFixed(2)}</strong></span>
+                                                        <span style={{ marginLeft: 'auto', color: '#64748b' }}>(Cálculo c/ {lotSizeInput} lotes)</span>
                                                     </div>
                                                 );
                                             })()}
@@ -1286,7 +1314,7 @@ export default function SinaisIA() {
                                     <tbody>
                                         {historico.filter(r => r.ativo !== 'TESTE_TI').map((row, i) => {
                                             const r = row as Record<string, unknown>;
-                                            const res = String(r.resultado ?? '').toUpperCase();
+                                            const res = String(r.resultado ?? '').trim().toUpperCase();
                                             const isGain = res === 'GAIN';
                                             const isStop = res === 'STOP';
                                             const isAberto = res === 'ABERTO';
@@ -1338,7 +1366,7 @@ export default function SinaisIA() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 12px', fontWeight: 800, color: resColor, fontFamily: 'monospace' }}>
-                                                        {(r.resultado_pontos ?? r.pontos) != null ? `${Number(r.resultado_pontos ?? r.pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos ?? r.pontos).toFixed(2)} pts` : '--'}
+                                                        {r.resultado_pontos != null ? `${Number(r.resultado_pontos) >= 0 ? '+' : ''}${Number(r.resultado_pontos).toFixed(2)} pts` : '--'}
                                                     </td>
                                                 </tr>
                                             );
@@ -1502,6 +1530,23 @@ export default function SinaisIA() {
                     </div>
                 </div>
 
+                {/* Lote Padrão */}
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Cálculo de TP (Lote)</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="number" step="0.01" min="0.01"
+                            value={lotSizeInput}
+                            onChange={(e) => setLotSizeInput(Number(e.target.value))}
+                            style={{
+                                width: '100%', background: '#0a0f16', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px', padding: '8px 12px', color: '#00e5ff', fontSize: '13px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                </div>
+
             </div>
 
             {/* ── Sinais Ativos ── */}
@@ -1588,7 +1633,7 @@ export default function SinaisIA() {
                 ) : (
                     historico.filter(r => r.ativo !== 'TESTE_TI').slice(0, 5).map((row, i) => {
                         const sig = row as Record<string, unknown>;
-                        const res = String(sig.resultado ?? '').toUpperCase();
+                        const res = String(sig.resultado ?? '').trim().toUpperCase();
                         const maxT = Number(sig.max_target ?? 0);
 
                         const isGain = res === 'GAIN';
@@ -1634,7 +1679,7 @@ export default function SinaisIA() {
                                     <div style={{ textAlign: 'right' }}>
                                         <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
                                         <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
-                                            {((sig.resultado_pontos ?? sig.pontos) != null) ? `${Number(sig.resultado_pontos ?? sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.resultado_pontos ?? sig.pontos))} pts` : '--'}
+                                            {sig.resultado_pontos != null ? `${Number(sig.resultado_pontos) >= 0 ? '+' : ''}${fmt(Number(sig.resultado_pontos))} pts` : '--'}
                                         </p>
                                     </div>                              </div>
 
