@@ -4,6 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { Search, Crown, BarChart2, Shield, Activity } from 'lucide-react';
 import AudioTester from '@/components/AudioTester';
 
+const LS_KEY_RISK_BALANCE = 'tickmatrix:risk:balance';
+const LS_KEY_RISK_PERC = 'tickmatrix:risk:percentage';
+const LS_KEY_RISK_DRAWDOWN = 'tickmatrix:risk:drawdown';
+
 // ─── Quick-pick stocks ────────────────────────────────────────────────────────
 const BR_STOCKS = [
     { ticker: 'PETR4', name: 'Petrobras' },
@@ -27,6 +31,23 @@ export default function TickMatrixAcoes() {
     const [balance, setBalance] = useState(10000);
     const [riskPerTrade, setRiskPerTrade] = useState(1);
     const [drawdownLimit, setDrawdownLimit] = useState(500);
+
+    // Carregar do localStorage ao montar
+    useEffect(() => {
+        const savedBalance = localStorage.getItem(LS_KEY_RISK_BALANCE);
+        if (savedBalance) setBalance(Number(savedBalance));
+
+        const savedPerc = localStorage.getItem(LS_KEY_RISK_PERC);
+        if (savedPerc) setRiskPerTrade(Number(savedPerc));
+
+        const savedDrawdown = localStorage.getItem(LS_KEY_RISK_DRAWDOWN);
+        if (savedDrawdown) setDrawdownLimit(Number(savedDrawdown));
+    }, []);
+
+    // Salvar no localStorage ao mudar
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_BALANCE, String(balance)); }, [balance]);
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_PERC, String(riskPerTrade)); }, [riskPerTrade]);
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_DRAWDOWN, String(drawdownLimit)); }, [drawdownLimit]);
 
     const handleQuickPick = (t: string) => {
         setSelected(t);

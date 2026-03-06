@@ -55,6 +55,11 @@ const SNIPER_ASSET_GROUPS = [
 const ALL_SNIPER_VALUES = SNIPER_ASSET_GROUPS.flatMap(g => g.assets.map(a => a.value));
 const LS_KEY = 'tickmatrix:sniper:selectedAssets';
 const LS_KEY_CUSTOM = 'tickmatrix:sniper:customAssets';
+const LS_KEY_SNIPER_ACTIVE = 'tickmatrix:sniper:active';
+const LS_KEY_RISK_BALANCE = 'tickmatrix:risk:balance';
+const LS_KEY_RISK_PERC = 'tickmatrix:risk:percentage';
+const LS_KEY_RISK_DRAWDOWN = 'tickmatrix:risk:drawdown';
+const LS_KEY_RISK_LOT = 'tickmatrix:risk:lot';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type TFData = { signal: string; signalStrength: string };
@@ -211,8 +216,26 @@ function TFChip({ label, data }: { label: string; data: TFData | null }) {
 export default function SinaisIA() {
     const [active, setActive] = useState(false);
 
+    // Efeito para carregar o estado salvo (Sniper e Gestão de Risco)
     useEffect(() => {
         console.log('🚀 [TickMatrix] SinaisIA Component Loaded');
+        
+        // Hidrata Sniper
+        const savedActive = localStorage.getItem(LS_KEY_SNIPER_ACTIVE);
+        if (savedActive !== null) setActive(savedActive === 'true');
+
+        // Hidrata Gestão de Risco
+        const savedBalance = localStorage.getItem(LS_KEY_RISK_BALANCE);
+        if (savedBalance) setAccountBalance(Number(savedBalance));
+
+        const savedPerc = localStorage.getItem(LS_KEY_RISK_PERC);
+        if (savedPerc) setRiskPercentage(Number(savedPerc));
+
+        const savedDrawdown = localStorage.getItem(LS_KEY_RISK_DRAWDOWN);
+        if (savedDrawdown) setDailyDrawdownLimit(Number(savedDrawdown));
+
+        const savedLot = localStorage.getItem(LS_KEY_RISK_LOT);
+        if (savedLot) setLotSizeInput(Number(savedLot));
     }, []);
     const [togglingRadar, setTogglingRadar] = useState(false);
     const [radarData, setRadarData] = useState<Record<string, RadarItem>>({});
@@ -239,6 +262,12 @@ export default function SinaisIA() {
     const [riskPercentage, setRiskPercentage] = useState(1.0);
     const [dailyDrawdownLimit, setDailyDrawdownLimit] = useState(500);
     const [lotSizeInput, setLotSizeInput] = useState(0.10);
+
+    // Salvar Gestão de Risco ao mudar
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_BALANCE, String(accountBalance)); }, [accountBalance]);
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_PERC, String(riskPercentage)); }, [riskPercentage]);
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_DRAWDOWN, String(dailyDrawdownLimit)); }, [dailyDrawdownLimit]);
+    useEffect(() => { localStorage.setItem(LS_KEY_RISK_LOT, String(lotSizeInput)); }, [lotSizeInput]);
 
     // ── Filtro Sniper ───────────────────────────────────────────────────────
     const [audioUnlocked, setAudioUnlocked] = useState(false);
@@ -365,6 +394,7 @@ export default function SinaisIA() {
         const next = !active;
         setTogglingRadar(true);
         setActive(next); // optimistic update
+        localStorage.setItem(LS_KEY_SNIPER_ACTIVE, String(next));
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
@@ -377,6 +407,7 @@ export default function SinaisIA() {
         } catch (err) {
             console.error('[Radar] Falha ao salvar estado do toggle:', err);
             setActive(!next); // rollback em caso de erro
+            localStorage.setItem(LS_KEY_SNIPER_ACTIVE, String(!next));
         } finally {
             setTogglingRadar(false);
         }
