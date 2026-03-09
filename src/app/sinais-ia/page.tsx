@@ -247,6 +247,13 @@ export default function SinaisIA() {
     const [archiveData, setArchiveData] = useState<Record<string, unknown>[]>([]);
     const [showHistorico, setShowHistorico] = useState(true);
     const [loadingHistorico, setLoadingHistorico] = useState(false);
+    
+    // Histórico de Sinais (Nova Aba)
+    const [sinaisViewMode, setSinaisViewMode] = useState<'recents' | 'search'>('recents');
+    const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
+    const [searchSignals, setSearchSignals] = useState<any[]>([]);
+    const [loadingSearch, setLoadingSearch] = useState(false);
+
     const prevSignals = useRef<Record<string, string>>({});
     const prevStarsMap = useRef<Record<string, number>>({});
     const signalTimes = useRef<Record<string, Date>>({}); // Birth time of the current signal
@@ -625,19 +632,40 @@ export default function SinaisIA() {
         }
     };
 
-    // Busca histórico arquivado
-    const fetchArchive = async () => {
+    // Busca sinais por data específica (Histórico)
+    const fetchSignalsByDate = async (dateStr: string) => {
+        setLoadingSearch(true);
         try {
-            const { data } = await supabase
-                .from('trading_archive')
+            // Define o range do dia (00:00:00 até 23:59:59) no horário local convertendo para ISO
+            const start = new Date(dateStr + 'T00:00:00');
+            const end = new Date(dateStr + 'T23:59:59');
+
+            // Se for hoje, busca na trading_history. Se for passado, na trading_archive.
+            const isToday = new Date().toISOString().split('T')[0] === dateStr;
+            const table = isToday ? 'trading_history' : 'trading_archive';
+
+            const { data, error } = await supabase
+                .from(table)
                 .select('*')
-                .order('created_at', { ascending: false })
-                .limit(50);
-            setArchiveData(data ?? []);
+                .gte('created_at', start.toISOString())
+                .lte('created_at', end.toISOString())
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setSearchSignals(data ?? []);
         } catch (err) {
-            console.error('[Archive] Falha ao buscar:', err);
+            console.error('[HistorySearch] Falha:', err);
+        } finally {
+            setLoadingSearch(false);
         }
     };
+
+    // Efeito para buscar quando a data ou modo mudar
+    useEffect(() => {
+        if (sinaisViewMode === 'search') {
+            fetchSignalsByDate(searchDate);
+        }
+    }, [searchDate, sinaisViewMode]);
 
     // Subscrição Realtime e Load Inicial
     useEffect(() => {
@@ -2002,20 +2030,64 @@ export default function SinaisIA() {
                 ))}
             </div>
 
-            {/* ── Sinais Recentes ── */}
+            {/* ── Sinais Recentes vs Histórico ── */}
             <div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.04)', borderTop: '1px solid rgba(0,229,255,0.06)', borderRadius: '0 0 16px 16px' }}>
-                <div style={{ padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <Zap style={{ width: '14px', height: '14px', color: '#ff9900' }} /> Sinais Recentes
-                    </span>
+                <div style={{ 
+                    padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                        <button 
+                            onClick={() => setSinaisViewMode('recents')}
+                            style={{ 
+                                background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0',
+                                display: 'flex', alignItems: 'center', gap: '7px',
+                                fontSize: '13px', fontWeight: 700, 
+                                color: sinaisViewMode === 'recents' ? '#ff9900' : '#475569',
+                                borderBottom: sinaisViewMode === 'recents' ? '2px solid #ff9900' : '2px solid transparent',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Zap style={{ width: '14px', height: '14px' }} /> Sinais Recentes
+                        </button>
+                        <button 
+                            onClick={() => setSinaisViewMode('search')}
+                            style={{ 
+                                background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0',
+                                display: 'flex', alignItems: 'center', gap: '7px',
+                                fontSize: '13px', fontWeight: 700, 
+                                color: sinaisViewMode === 'search' ? '#00e5ff' : '#475569',
+                                borderBottom: sinaisViewMode === 'search' ? '2px solid #00e5ff' : '2px solid transparent',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <ShieldCheck style={{ width: '14px', height: '14px' }} /> Histórico de Sinais
+                        </button>
+                    </div>
+
+                    {sinaisViewMode === 'search' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>VER DIA:</span>
+                            <input 
+                                type="date"
+                                value={searchDate}
+                                onChange={(e) => setSearchDate(e.target.value)}
+                                style={{
+                                    background: '#0a0f16', border: '1px solid rgba(0,229,255,0.2)',
+                                    borderRadius: '6px', padding: '4px 10px', color: '#00e5ff',
+                                    fontSize: '11px', fontWeight: 700, outline: 'none', cursor: 'pointer'
+                                }}
+                            />
+                            {loadingSearch && <RefreshCw style={{ width: '12px', height: '12px', color: '#00e5ff', animation: 'spin 1s linear infinite' }} />}
+                        </div>
+                    )}
                 </div>
-                {historico.length === 0 ? (
+                {((sinaisViewMode === 'recents' ? historico : searchSignals).length === 0 && !loadingSearch) ? (
                     /* ── Empty State ─────────────────────────────────────────── */
                     <div style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        justifyContent: 'center', padding: '40px 24px', gap: '14px',
+                        justifyContent: 'center', padding: '60px 24px', gap: '14px',
                     }}>
-                        {/* Ícone de radar animado */}
                         <style>{`
                             @keyframes radarSpin {
                                 0%   { transform: rotate(0deg);   opacity: 1; }
@@ -2028,13 +2100,11 @@ export default function SinaisIA() {
                             }
                         `}</style>
                         <div style={{ position: 'relative', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {/* Anel pulsante */}
                             <div style={{
                                 position: 'absolute', inset: 0, borderRadius: '50%',
                                 border: '2px solid rgba(0,229,255,0.35)',
                                 animation: 'radarPing 2.2s ease-in-out infinite',
                             }} />
-                            {/* Ícone principal */}
                             <div style={{
                                 width: '44px', height: '44px', borderRadius: '50%',
                                 background: 'rgba(0,229,255,0.07)',
@@ -2049,18 +2119,17 @@ export default function SinaisIA() {
                                 />
                             </div>
                         </div>
-                        {/* Textos */}
                         <div style={{ textAlign: 'center' }}>
                             <p style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', margin: '0 0 6px' }}>
-                                Acompanhando mercado...
+                                {sinaisViewMode === 'recents' ? 'Acompanhando mercado...' : 'Histórico de Arquivo'}
                             </p>
-                            <p style={{ fontSize: '11px', color: '#334155', margin: '0 0 10px', letterSpacing: '0.02em' }}>
-                                Nenhum sinal registrado hoje ainda.
+                            <p style={{ fontSize: '11px', color: '#334155', margin: '0', letterSpacing: '0.02em' }}>
+                                {sinaisViewMode === 'recents' ? 'Nenhum sinal registrado hoje ainda.' : 'Nenhum sinal encontrado para este dia.'}
                             </p>
                         </div>
                     </div>
                 ) : (
-                    historico.filter(r => r.ativo !== 'TESTE_TI').slice(0, 5).map((row, i) => {
+                    (sinaisViewMode === 'recents' ? historico.slice(0, 5) : searchSignals).map((row, i) => {
                         const sig = row as Record<string, unknown>;
                         const res = String(sig.resultado ?? '').trim().toUpperCase();
                         const maxT = Number(sig.max_target ?? 0);
@@ -2079,7 +2148,6 @@ export default function SinaisIA() {
                         let tp2 = Number(sig.take_profit_2 ?? 0);
                         let tp3 = Number(sig.take_profit_3 ?? 0);
 
-                        // Fallback calculando dinamicamente alvos antigos que foram zerados
                         if (!tp1 && !tp2 && !tp3 && entry > 0 && sl > 0) {
                             const diff = Math.abs(entry - sl);
                             if (isBuy) {
@@ -2093,24 +2161,21 @@ export default function SinaisIA() {
                             }
                         }
 
-                        // Prioriza o horário em que o sinal foi detectado (15:03 no caso do Erik)
                         const timeRaw = sig.signal_time || sig.open_time || sig.execution_time || sig.close_time || sig.created_at;
                         const timeStr = timeRaw ? formatBRT(timeRaw as string) : '—';
-
                         const fmt = (v: number) => v.toFixed(v > 100 ? 2 : 4);
 
-                        // Badge logic
                         let badgeText = 'Acompanhando';
                         let badgeColor = '#00e5ff';
                         if (isGain) { badgeText = 'Gain (Alvo 3)'; badgeColor = '#00e676'; }
                         else if (isBreakeven) { badgeText = `Breakeven (Pós Alvo ${maxT})`; badgeColor = '#94a3b8'; }
                         else if (isStop) { badgeText = 'Stop Loss'; badgeColor = '#ef4444'; }
 
-                        // Background row color
                         const bgCol = isGain ? 'rgba(0,230,118,0.04)' : isStop ? 'rgba(239,68,68,0.04)' : isBreakeven ? 'rgba(148,163,184,0.03)' : 'transparent';
+                        const listSize = sinaisViewMode === 'recents' ? historico.length : searchSignals.length;
 
                         return (
-                            <div key={String(sig.id)} style={{ padding: '16px 24px', background: bgCol, borderBottom: i < historico.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'default' }}>
+                            <div key={String(sig.id)} style={{ padding: '16px 24px', background: bgCol, borderBottom: i < listSize - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', cursor: 'default' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         {isBuy ? <TrendingUp style={{ width: '16px', height: '16px', color: '#00e676' }} /> : <TrendingDown style={{ width: '16px', height: '16px', color: '#ef4444' }} />}
@@ -2118,41 +2183,37 @@ export default function SinaisIA() {
                                         <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: `${badgeColor}20`, color: badgeColor, border: `1px solid ${badgeColor}30` }}>
                                             {badgeText}
                                         </span>
+                                        {Number(sig.stars_at_entry) > 0 && (
+                                            <span style={{ fontSize: '11px', color: '#f59e0b', marginLeft: '4px' }}>
+                                                {'★'.repeat(Number(sig.stars_at_entry))}
+                                            </span>
+                                        )}
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px', fontFamily: 'monospace' }}>⏱ {timeStr}</p>
                                         <p style={{ fontSize: '12px', fontWeight: 800, color: isGain ? '#00e676' : isStop ? '#ef4444' : isBreakeven ? '#94a3b8' : '#00e5ff', margin: 0, fontFamily: 'monospace' }}>
                                             {(sig.resultado_pontos ?? sig.pontos) != null ? `${Number(sig.resultado_pontos ?? sig.pontos) >= 0 ? '+' : ''}${fmt(Number(sig.resultado_pontos ?? sig.pontos))} pts` : '--'}
                                         </p>
-                                    </div>                              </div>
+                                    </div>
+                                </div>
 
-                                {/* Auditoria de Alvos (Horizontal) */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-
-                                    {/* Entrada e SL */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '12px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
                                         <span style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>Entrada: <strong style={{ color: '#e2e8f0' }}>{fmt(entry)}</strong></span>
                                         <span style={{ fontSize: '10px', color: '#ef4444', fontFamily: 'monospace' }}>SL: <strong style={{ color: '#fca5a5' }}>{fmt(sl)}</strong></span>
                                     </div>
-
-                                    {/* Alvo 1 */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '8px' }}>
                                         <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 1 || isGain ? '#00e676' : '#64748b' }}>Alvo 1 (1:1) {maxT >= 1 || isGain ? '✓' : ''}</span>
                                         <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 1 || isGain ? '#fff' : '#475569' }}>{fmt(tp1)}</span>
                                     </div>
-
-                                    {/* Alvo 2 */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 2 || isGain ? '#00e676' : '#64748b' }}>Alvo 2 (1:2) {maxT >= 2 || isGain ? '✓' : ''}</span>
                                         <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 2 || isGain ? '#fff' : '#475569' }}>{fmt(tp2)}</span>
                                     </div>
-
-                                    {/* Alvo 3 */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span style={{ fontSize: '10px', fontWeight: 700, color: maxT >= 3 || isGain ? '#00e676' : '#64748b' }}>Alvo 3 (1:3) {maxT >= 3 || isGain ? '✓' : ''}</span>
                                         <span style={{ fontSize: '11px', fontFamily: 'monospace', color: maxT >= 3 || isGain ? '#fff' : '#475569' }}>{fmt(tp3)}</span>
                                     </div>
-
                                 </div>
                             </div>
                         );
