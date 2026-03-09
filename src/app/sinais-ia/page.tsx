@@ -566,6 +566,23 @@ export default function SinaisIA() {
         }
     };
 
+    const fetchArchive = async () => {
+        setLoadingHistorico(true);
+        try {
+            const { data } = await supabase
+                .from('trading_archive')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            setArchiveData(data ?? []);
+        } catch (err) {
+            console.error('[Arquivo] Falha ao buscar:', err);
+        } finally {
+            setLoadingHistorico(false);
+        }
+    };
+
     // Cálculo de P/L Diário (Hoje)
     const dailyPnl = historico.reduce((acc, row) => {
         if (row.resultado === 'ABERTO') return acc;
