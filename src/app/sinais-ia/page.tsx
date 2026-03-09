@@ -251,6 +251,7 @@ export default function SinaisIA() {
     const prevStarsMap = useRef<Record<string, number>>({});
     const signalTimes = useRef<Record<string, Date>>({}); // Birth time of the current signal
     const lastUpdateMap = useRef<Record<string, number>>({}); // Cache para evitar chamadas excessivas (Twelve Data)
+    const watchdogProcessing = useRef(false);
 
     // ── Construtor de Estratégias (Filtros de Confluência) ──────────────────
     const [activeFilters, setActiveFilters] = useState({
@@ -694,6 +695,9 @@ export default function SinaisIA() {
 
     // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
     const fetchOne = async (fav: FavoriteAsset) => {
+        // Marcamos o início da busca IMEDIATAMENTE para evitar que watchdogs paralelos disparem
+        lastUpdateMap.current[fav.value] = Date.now();
+        
         try {
             // M5 primeiro — reaproveita os dados de preço, rsi, trend
             const m5Data = await fetchTF(fav, '5m');
@@ -716,14 +720,17 @@ export default function SinaisIA() {
             const oldStars = prevStarsMap.current[fav.value] || 0;
 
             // Condição de Virada (Reset de Tempo): 
-            // APENAS quando muda a DIREÇÃO (NEUTRO -> SINAL ou COMPRA <-> VENDA)
+            // 1. Mudou a DIREÇÃO (NEUTRO -> SINAL ou COMPRA <-> VENDA)
+            // 2. Mudou a FORÇA para ELITE (Upgrade para 3 estrelas)
             const isDirectionInversion = (direction !== 'NEUTRO') && (
                 oldSig === undefined || 
                 oldSig === 'NEUTRO' || 
                 oldSig !== direction
             );
 
-            if (isDirectionInversion) {
+            const isEliteUpgrade = (direction !== 'NEUTRO') && (oldStars < 3 && stars === 3);
+
+            if (isDirectionInversion || isEliteUpgrade) {
                 signalTimes.current[fav.value] = now;
             }
 
@@ -833,14 +840,16 @@ export default function SinaisIA() {
 
             // ── Registrar ou Atualizar trade ao detectar mudança ────────────
             if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
-                if (isDirectionInversion) {
+                // Verificamos se já existe um tracking ABERTO para este ativo
+                const activeIndex = activeTrades.findIndex(t => t.asset === fav.value && t.status === 'ACOMPANHANDO');
+
+                if (isDirectionInversion || activeIndex === -1) {
+                    // Nova Direção ou Nenhum ativo -> INSERT
                     const uniqueTradeId = crypto.randomUUID();
                     setActiveTrades(prev => {
-                        // Previne duplicata exata no mesmo frame
-                        if (prev.some(t => t.asset === fav.value && t.direction === direction && t.status === 'ACOMPANHANDO')) {
-                            return prev;
-                        }
-
+                        // Segunda camada de segurança: remove qualquer 'ABERTO' antigo do mesmo ativo ao inverter
+                        const cleanPrev = prev.filter(t => !(t.asset === fav.value && t.status === 'ACOMPANHANDO'));
+                        
                         const newTrade: ActiveTrade = {
                             id: uniqueTradeId,
                             asset: fav.value,
@@ -859,19 +868,20 @@ export default function SinaisIA() {
 
                         // Persiste abertura no Supabase
                         openTradeInSupabase(newTrade).then(supabaseId => {
-                            setActiveTrades(current => [
-                                { ...newTrade, supabaseId },
-                                ...current.filter(t => t.id !== uniqueTradeId).slice(0, 19)
-                            ]);
+                            setActiveTrades(current => {
+                                // Garante que não adicionamos se já houver um registro com esse UUID (race condition UI)
+                                if (current.some(c => c.id === uniqueTradeId)) return current;
+                                return [{ ...newTrade, supabaseId }, ...current.filter(t => t.id !== uniqueTradeId)].slice(0, 20);
+                            });
                             fetchHistorico();
                         });
 
-                        return [newTrade, ...prev].slice(0, 19);
+                        return [newTrade, ...cleanPrev].slice(0, 20);
                     });
                 } else {
-                    // Mudança apenas de FORÇA ou ALVOS (Mesma Direção) -> UPDATE In-place
+                    // Mesma Direção -> UPDATE (In-place)
                     setActiveTrades(prev => prev.map(t => {
-                        if (t.asset === fav.value && t.status === 'ACOMPANHANDO' && t.direction === direction) {
+                        if (t.asset === fav.value && t.status === 'ACOMPANHANDO') {
                             const updated = {
                                 ...t,
                                 stars,
@@ -881,21 +891,21 @@ export default function SinaisIA() {
                                 takeProfit2Raw,
                                 takeProfit3Raw,
                                 takeProfitRaw,
+                                signalTime: signalTimes.current[fav.value] || t.signalTime, // Atualiza se houve Elite Upgrade
                             };
                             
-                            // Sincroniza Update no Supabase (silencioso)
                             if (t.supabaseId) {
                                 supabase.from('trading_history').update({
-                                    stars_at_entry: stars, // Atualiza para a nova força
+                                    stars_at_entry: stars,
                                     entry_price: entryRaw,
                                     stop_loss: stopLossRaw,
+                                    signal_time: updated.signalTime.toISOString(),
                                     take_profit_1: takeProfit1Raw,
                                     take_profit_2: takeProfit2Raw,
                                     take_profit_3: takeProfit3Raw,
                                     take_profit: takeProfit3Raw,
                                 }).eq('id', t.supabaseId).then(() => fetchHistorico());
                             }
-                            
                             return updated;
                         }
                         return t;
@@ -933,8 +943,6 @@ export default function SinaisIA() {
                     takeProfitRaw,
                 },
             }));
-
-            lastUpdateMap.current[fav.value] = Date.now();
 
             if (changed) {
                 setTimeout(() => setRadarData(prev => ({ ...prev, [fav.value]: { ...prev[fav.value], flashing: false } })), 2500);
@@ -991,26 +999,33 @@ export default function SinaisIA() {
         
         // Watchdog de 10s
         const watchdog = setInterval(async () => {
+            if (watchdogProcessing.current) {
+                console.log('⏳ Watchdog: Analise em andamento, pulando ciclo.');
+                return;
+            }
+            
+            watchdogProcessing.current = true;
             console.log(`⏱ Watchdog Check: ${new Date().toLocaleTimeString()}`);
             
-            for (const fav of favorites) {
-                try {
-                    console.log(`🔎 Analisando: [${fav.value}]`);
-                    
-                    // Sistema de Cache: Só consulta API se o último update tiver > 60s
-                    const now = Date.now();
-                    const lastUp = lastUpdateMap.current[fav.value] || 0;
-                    
-                    if (now - lastUp < 60000) {
-                        continue; 
-                    }
+            try {
+                for (const fav of favorites) {
+                    try {
+                        const now = Date.now();
+                        const lastUp = lastUpdateMap.current[fav.value] || 0;
+                        
+                        if (now - lastUp < 60000) {
+                            continue; 
+                        }
 
-                    await fetchOne(fav);
-                    
-                } catch (err) {
-                    console.error(`❌ Erro no monitoramento de ${fav.value}:`, err);
-                    continue; // Garante que o loop não trave
+                        console.log(`🔎 Analisando: [${fav.value}]`);
+                        await fetchOne(fav);
+                        
+                    } catch (err) {
+                        console.error(`❌ Erro no monitoramento de ${fav.value}:`, err);
+                    }
                 }
+            } finally {
+                watchdogProcessing.current = false;
             }
         }, 10000);
 
