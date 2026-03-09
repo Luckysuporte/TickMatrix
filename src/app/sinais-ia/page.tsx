@@ -840,14 +840,16 @@ export default function SinaisIA() {
 
             // ── Registrar ou Atualizar trade ao detectar mudança ────────────
             if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
-                // Verificamos se já existe um tracking ABERTO para este ativo
-                const activeIndex = activeTrades.findIndex(t => t.asset === fav.value && t.status === 'ACOMPANHANDO');
+                setActiveTrades(prev => {
+                    // Singleton: Buscamos se JÁ existe um tracking ABERTO para este ativo
+                    const existingIndex = prev.findIndex(t => t.asset === fav.value && t.status === 'ACOMPANHANDO');
+                    const existingTrade = existingIndex > -1 ? prev[existingIndex] : null;
 
-                if (isDirectionInversion || activeIndex === -1) {
-                    // Nova Direção ou Nenhum ativo -> INSERT
-                    const uniqueTradeId = crypto.randomUUID();
-                    setActiveTrades(prev => {
-                        // Segunda camada de segurança: remove qualquer 'ABERTO' antigo do mesmo ativo ao inverter
+                    if (isDirectionInversion || !existingTrade) {
+                        // NOVA DIREÇÃO ou NOVO SINAL -> INSERT
+                        const uniqueTradeId = crypto.randomUUID();
+                        
+                        // Remove qualquer 'ABERTO' antigo do mesmo ativo (segurança extra)
                         const cleanPrev = prev.filter(t => !(t.asset === fav.value && t.status === 'ACOMPANHANDO'));
                         
                         const newTrade: ActiveTrade = {
@@ -869,7 +871,6 @@ export default function SinaisIA() {
                         // Persiste abertura no Supabase
                         openTradeInSupabase(newTrade).then(supabaseId => {
                             setActiveTrades(current => {
-                                // Garante que não adicionamos se já houver um registro com esse UUID (race condition UI)
                                 if (current.some(c => c.id === uniqueTradeId)) return current;
                                 return [{ ...newTrade, supabaseId }, ...current.filter(t => t.id !== uniqueTradeId)].slice(0, 20);
                             });
@@ -877,40 +878,41 @@ export default function SinaisIA() {
                         });
 
                         return [newTrade, ...cleanPrev].slice(0, 20);
-                    });
-                } else {
-                    // Mesma Direção -> UPDATE (In-place)
-                    setActiveTrades(prev => prev.map(t => {
-                        if (t.asset === fav.value && t.status === 'ACOMPANHANDO') {
-                            const updated = {
-                                ...t,
-                                stars,
-                                entryRaw,
-                                stopLossRaw,
-                                takeProfit1Raw,
-                                takeProfit2Raw,
-                                takeProfit3Raw,
-                                takeProfitRaw,
-                                signalTime: signalTimes.current[fav.value] || t.signalTime, // Atualiza se houve Elite Upgrade
-                            };
-                            
-                            if (t.supabaseId) {
-                                supabase.from('trading_history').update({
-                                    stars_at_entry: stars,
-                                    entry_price: entryRaw,
-                                    stop_loss: stopLossRaw,
-                                    signal_time: updated.signalTime.toISOString(),
-                                    take_profit_1: takeProfit1Raw,
-                                    take_profit_2: takeProfit2Raw,
-                                    take_profit_3: takeProfit3Raw,
-                                    take_profit: takeProfit3Raw,
-                                }).eq('id', t.supabaseId).then(() => fetchHistorico());
-                            }
-                            return updated;
+                    } else {
+                        // MESMA DIREÇÃO (Upgrade ou Downgrade de Força) -> UPDATE In-place
+                        const updatedSignalTime = isEliteUpgrade ? (signalTimes.current[fav.value] || existingTrade.signalTime) : existingTrade.signalTime;
+                        
+                        const updatedTrade = {
+                            ...existingTrade,
+                            stars,
+                            entryRaw,
+                            stopLossRaw,
+                            takeProfit1Raw,
+                            takeProfit2Raw,
+                            takeProfit3Raw,
+                            takeProfitRaw,
+                            signalTime: updatedSignalTime,
+                        };
+
+                        // Sincroniza Update no Supabase (silencioso)
+                        if (existingTrade.supabaseId) {
+                            supabase.from('trading_history').update({
+                                stars_at_entry: stars,
+                                entry_price: entryRaw,
+                                stop_loss: stopLossRaw,
+                                signal_time: updatedSignalTime.toISOString(),
+                                take_profit_1: takeProfit1Raw,
+                                take_profit_2: takeProfit2Raw,
+                                take_profit_3: takeProfit3Raw,
+                                take_profit: takeProfit3Raw,
+                            }).eq('id', existingTrade.supabaseId).then(() => fetchHistorico());
                         }
-                        return t;
-                    }));
-                }
+
+                        const newActive = [...prev];
+                        newActive[existingIndex] = updatedTrade;
+                        return newActive;
+                    }
+                });
             }
 
             if (changed) {
