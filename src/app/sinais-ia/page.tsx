@@ -717,10 +717,13 @@ export default function SinaisIA() {
 
             // Condição de Virada: 
             // 1. Mudou de NEUTRO para COMPRA/VENDA
-            // 2. Ou subiu de < 3 estrelas para 3 estrelas (Elite)
+            // 2. Mudou a DIREÇÃO (Inversão: Compra -> Venda ou Venda -> Compra)
+            // 3. Mudou a FORÇA do sinal (Estrelas)
             const isTurnaround = (direction !== 'NEUTRO') && (
-                (oldSig === 'NEUTRO' || oldSig === undefined) ||
-                (oldStars < 3 && stars === 3)
+                oldSig === undefined || 
+                oldSig === 'NEUTRO' || 
+                oldSig !== direction || 
+                oldStars !== stars
             );
 
             if (isTurnaround) {
@@ -737,7 +740,7 @@ export default function SinaisIA() {
             prevSignals.current[fav.value] = direction;
             prevStarsMap.current[fav.value] = stars;
 
-            const changed = oldSig !== undefined && oldSig !== direction;
+            const changed = oldSig !== undefined && (oldSig !== direction || oldStars !== stars);
 
             const currentPriceRaw: number = m5Data.priceRaw ?? 0;
             const entryRaw: number = m5Data.entryRaw ?? currentPriceRaw;
@@ -832,12 +835,12 @@ export default function SinaisIA() {
             }
 
             // ── Registrar novo trade ao detectar mudança de sinal ────────────
-            const uniqueTradeId = `${fav.value}_${direction}_M5`;
+            const uniqueTradeId = crypto.randomUUID();
 
             if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
                 setActiveTrades(prev => {
-                    // Previne duplicatas caso o trade já exista e esteja ativo
-                    if (prev.some(t => t.id === uniqueTradeId && t.status === 'ACOMPANHANDO')) {
+                    // Previne duplicatas: se já existe um trade ABERTO para este ativo com MESMA DIREÇÃO E ESTRELAS
+                    if (prev.some(t => t.asset === fav.value && t.direction === direction && t.stars === stars && t.status === 'ACOMPANHANDO')) {
                         return prev;
                     }
 
