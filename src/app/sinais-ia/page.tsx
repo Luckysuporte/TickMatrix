@@ -672,10 +672,6 @@ export default function SinaisIA() {
         archiveOldTrades(); // Limpa trades antigos ao carregar
         fetchHistorico(); // Carrega na inicialização independente do toggle
         
-        if (historyTab === 'archive') {
-            fetchArchive();
-        }
-
         const channel = supabase
             .channel('realtime_trading_history')
             .on(
@@ -2048,7 +2044,7 @@ export default function SinaisIA() {
                                 transition: 'all 0.2s'
                             }}
                         >
-                            <Zap style={{ width: '14px', height: '14px' }} /> Sinais Recentes [TESTE]
+                            <Zap style={{ width: '14px', height: '14px' }} /> Sinais Recentes
                         </button>
                         <button 
                             onClick={() => setSinaisViewMode('search')}
