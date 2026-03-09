@@ -715,18 +715,15 @@ export default function SinaisIA() {
             const now = new Date();
             const oldStars = prevStarsMap.current[fav.value] || 0;
 
-            // Condição de Virada: 
-            // 1. Mudou de NEUTRO para COMPRA/VENDA
-            // 2. Mudou a DIREÇÃO (Inversão: Compra -> Venda ou Venda -> Compra)
-            // 3. Mudou a FORÇA do sinal (Estrelas)
-            const isTurnaround = (direction !== 'NEUTRO') && (
+            // Condição de Virada (Reset de Tempo): 
+            // APENAS quando muda a DIREÇÃO (NEUTRO -> SINAL ou COMPRA <-> VENDA)
+            const isDirectionInversion = (direction !== 'NEUTRO') && (
                 oldSig === undefined || 
                 oldSig === 'NEUTRO' || 
-                oldSig !== direction || 
-                oldStars !== stars
+                oldSig !== direction
             );
 
-            if (isTurnaround) {
+            if (isDirectionInversion) {
                 signalTimes.current[fav.value] = now;
             }
 
@@ -834,43 +831,76 @@ export default function SinaisIA() {
                 });
             }
 
-            // ── Registrar novo trade ao detectar mudança de sinal ────────────
-            const uniqueTradeId = crypto.randomUUID();
-
+            // ── Registrar ou Atualizar trade ao detectar mudança ────────────
             if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
-                setActiveTrades(prev => {
-                    // Previne duplicatas: se já existe um trade ABERTO para este ativo com MESMA DIREÇÃO E ESTRELAS
-                    if (prev.some(t => t.asset === fav.value && t.direction === direction && t.stars === stars && t.status === 'ACOMPANHANDO')) {
-                        return prev;
-                    }
+                if (isDirectionInversion) {
+                    const uniqueTradeId = crypto.randomUUID();
+                    setActiveTrades(prev => {
+                        // Previne duplicata exata no mesmo frame
+                        if (prev.some(t => t.asset === fav.value && t.direction === direction && t.status === 'ACOMPANHANDO')) {
+                            return prev;
+                        }
 
-                    const newTrade: ActiveTrade = {
-                        id: uniqueTradeId,
-                        asset: fav.value,
-                        direction: direction as 'COMPRA' | 'VENDA',
-                        entryRaw,
-                        stopLossRaw,
-                        takeProfit1Raw,
-                        takeProfit2Raw,
-                        takeProfit3Raw,
-                        takeProfitRaw,
-                        signalTime: signalTimes.current[fav.value] || new Date(),
-                        openTime: new Date(),
-                        stars,
-                        status: 'ACOMPANHANDO',
-                    };
+                        const newTrade: ActiveTrade = {
+                            id: uniqueTradeId,
+                            asset: fav.value,
+                            direction: direction as 'COMPRA' | 'VENDA',
+                            entryRaw,
+                            stopLossRaw,
+                            takeProfit1Raw,
+                            takeProfit2Raw,
+                            takeProfit3Raw,
+                            takeProfitRaw,
+                            signalTime: signalTimes.current[fav.value] || new Date(),
+                            openTime: new Date(),
+                            stars,
+                            status: 'ACOMPANHANDO',
+                        };
 
-                    // Persiste abertura no Supabase e salva o UUID retornado
-                    openTradeInSupabase(newTrade).then(supabaseId => {
-                        setActiveTrades(current => [
-                            { ...newTrade, supabaseId },
-                            ...current.filter(t => t.id !== uniqueTradeId).slice(0, 19)
-                        ]);
-                        fetchHistorico(); // Force refresh local history
+                        // Persiste abertura no Supabase
+                        openTradeInSupabase(newTrade).then(supabaseId => {
+                            setActiveTrades(current => [
+                                { ...newTrade, supabaseId },
+                                ...current.filter(t => t.id !== uniqueTradeId).slice(0, 19)
+                            ]);
+                            fetchHistorico();
+                        });
+
+                        return [newTrade, ...prev].slice(0, 19);
                     });
-
-                    return [newTrade, ...prev].slice(0, 19);
-                });
+                } else {
+                    // Mudança apenas de FORÇA ou ALVOS (Mesma Direção) -> UPDATE In-place
+                    setActiveTrades(prev => prev.map(t => {
+                        if (t.asset === fav.value && t.status === 'ACOMPANHANDO' && t.direction === direction) {
+                            const updated = {
+                                ...t,
+                                stars,
+                                entryRaw,
+                                stopLossRaw,
+                                takeProfit1Raw,
+                                takeProfit2Raw,
+                                takeProfit3Raw,
+                                takeProfitRaw,
+                            };
+                            
+                            // Sincroniza Update no Supabase (silencioso)
+                            if (t.supabaseId) {
+                                supabase.from('trading_history').update({
+                                    stars_at_entry: stars, // Atualiza para a nova força
+                                    entry_price: entryRaw,
+                                    stop_loss: stopLossRaw,
+                                    take_profit_1: takeProfit1Raw,
+                                    take_profit_2: takeProfit2Raw,
+                                    take_profit_3: takeProfit3Raw,
+                                    take_profit: takeProfit3Raw,
+                                }).eq('id', t.supabaseId).then(() => fetchHistorico());
+                            }
+                            
+                            return updated;
+                        }
+                        return t;
+                    }));
+                }
             }
 
             if (changed) {
