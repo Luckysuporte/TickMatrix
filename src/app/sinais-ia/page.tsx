@@ -480,6 +480,23 @@ export default function SinaisIA() {
     const openTradeInSupabase = async (trade: ActiveTrade): Promise<string | undefined> => {
         try {
             setInsertError(null); // Limpa erro anterior
+
+            // ── ANTI-ZUMBI: Fecha sinais anteriores do mesmo ativo que ainda estejam 'ABERTO' ──
+            try {
+                const { error: closeErr } = await supabase
+                    .from('trading_history')
+                    .update({
+                        resultado: 'STOP DE INVERSÃO',
+                        close_time: new Date().toISOString(),
+                    })
+                    .eq('ativo', trade.asset)
+                    .eq('resultado', 'ABERTO');
+                
+                if (closeErr) console.warn('[Anti-Zumbi] Falha ao limpar sinais órfãos:', closeErr);
+            } catch (e) {
+                console.error('[Anti-Zumbi] Erro estrutural ao tentar fechar sinais anteriores:', e);
+            }
+
             const payload = {
                 ativo: trade.asset,
                 timeframe: '5m',
@@ -572,6 +589,7 @@ export default function SinaisIA() {
             const { data } = await supabase
                 .from('trading_archive')
                 .select('*')
+                .neq('resultado', 'ABERTO')
                 .order('created_at', { ascending: false })
                 .limit(50);
 
@@ -661,12 +679,16 @@ export default function SinaisIA() {
             const isToday = new Date().toISOString().split('T')[0] === dateStr;
             const table = isToday ? 'trading_history' : 'trading_archive';
 
-            const { data, error } = await supabase
-                .from(table)
-                .select('*')
+            // Se estiver buscando do arquivo, remove operações que ainda estão 'ABERTO'
+            let query = supabase.from(table).select('*')
                 .gte('created_at', start.toISOString())
-                .lte('created_at', end.toISOString())
-                .order('created_at', { ascending: false });
+                .lte('created_at', end.toISOString());
+            
+            if (table === 'trading_archive') {
+                query = query.neq('resultado', 'ABERTO');
+            }
+
+            const { data, error } = await query.order('created_at', { ascending: false });
 
             if (error) throw error;
             setSearchSignals(data ?? []);
@@ -2085,10 +2107,12 @@ export default function SinaisIA() {
                                 type="date"
                                 value={searchDate}
                                 onChange={(e) => setSearchDate(e.target.value)}
+                                onClick={(e) => e.currentTarget.showPicker()}
                                 style={{
                                     background: '#0a0f16', border: '1px solid rgba(0,229,255,0.2)',
                                     borderRadius: '6px', padding: '4px 10px', color: '#00e5ff',
-                                    fontSize: '11px', fontWeight: 700, outline: 'none', cursor: 'pointer'
+                                    fontSize: '11px', fontWeight: 700, outline: 'none', cursor: 'pointer',
+                                    colorScheme: 'dark'
                                 }}
                             />
                             {loadingSearch && <RefreshCw style={{ width: '12px', height: '12px', color: '#00e5ff', animation: 'spin 1s linear infinite' }} />}
