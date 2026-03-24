@@ -1246,9 +1246,7 @@ export default function SinaisIA() {
                             <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#ffcc00', margin: 0 }}>
                                 Meu Radar — Score de Confluência
                             </h2>
-                            <p style={{ fontSize: '11px', color: '#475569', margin: 0 }}>
-                                M5 · M15 · H1 • Atualiza a cada 60s
-                            </p>
+
                         </div>
                     </div>
                     {favorites.length > 0 && (
@@ -1268,24 +1266,7 @@ export default function SinaisIA() {
                     )}
                 </div>
 
-                {/* Legenda de estrelas */}
-                {favorites.length > 0 && (
-                    <div style={{
-                        background: '#080b10', borderLeft: '1px solid rgba(255,204,0,0.12)', borderRight: '1px solid rgba(255,204,0,0.12)',
-                        padding: '8px 20px', display: 'flex', gap: '20px', flexWrap: 'wrap',
-                    }}>
-                        {[
-                            { stars: 1, label: '1★ — Sinal só no M5' },
-                            { stars: 2, label: '2★ — M5 + M15 alinhados' },
-                            { stars: 3, label: '3★ — Oportunidade de Elite (M5+M15+H1)' },
-                        ].map(({ stars, label }) => (
-                            <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#475569' }}>
-                                <StarBadge stars={stars} direction="COMPRA" />
-                                <span>{label}</span>
-                            </div>
-                        ))}
-                    </div>
-                )}
+
 
                 {/* Sem favoritos */}
                 {favorites.length === 0 && (
@@ -1357,10 +1338,9 @@ export default function SinaisIA() {
                                             }
                                         </div>
 
-                                        {/* Nome + estrelas */}
+                                        {/* Nome do ativo */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                                             <span style={{ fontWeight: 800, color: '#fff', fontSize: '15px' }}>{item.asset.label}</span>
-                                            {!item.loading && <StarBadge stars={item.stars} direction={item.signal} />}
                                         </div>
 
                                         {/* Badge sinal */}
@@ -1373,17 +1353,7 @@ export default function SinaisIA() {
                                             </span>
                                         )}
 
-                                        {/* Banner Elite */}
-                                        {isElite && (
-                                            <span style={{
-                                                fontSize: '10px', fontWeight: 900, color: '#000',
-                                                background: 'linear-gradient(90deg, #ffcc00, #ff9900)',
-                                                padding: '2px 10px', borderRadius: '20px',
-                                                display: 'flex', alignItems: 'center', gap: '4px',
-                                            }}>
-                                                <AlertTriangle style={{ width: '10px', height: '10px' }} /> ELITE 3★
-                                            </span>
-                                        )}
+
 
                                         {/* Início do Sinal (Timestamp de Virada) */}
                                         {item.signalStartTime && (
@@ -1514,31 +1484,7 @@ export default function SinaisIA() {
                                         )}
                                     </div>
 
-                                    {/* Linha 2: chips TF + métricas */}
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <TFChip label="M5" data={item.m5} />
-                                        <TFChip label="M15" data={item.m15} />
-                                        <TFChip label="H1" data={item.h1} />
 
-                                        <span style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
-
-                                        <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                            Preço <strong style={{ color: '#fff' }}>{item.loading ? '…' : item.price}</strong>
-                                        </span>
-                                        <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                            RSI <strong style={{
-                                                color: item.loading ? '#64748b'
-                                                    : parseFloat(item.rsi14) < 35 ? '#00e676'
-                                                        : parseFloat(item.rsi14) > 65 ? '#ef4444'
-                                                            : '#fff'
-                                            }}>{item.loading ? '…' : item.rsi14}</strong>
-                                        </span>
-                                        <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                            Tend <strong style={{
-                                                color: item.trend === 'ALTA' ? '#00e676' : item.trend === 'BAIXA' ? '#ef4444' : '#64748b'
-                                            }}>{item.loading ? '…' : item.trend}</strong>
-                                        </span>
-                                    </div>
 
                                     {/* Linha 3: Dimensionamento da Posição — dados reais da API (entry ± ATR) */}
                                     {!item.loading && item.stopLossRaw > 0 && (
@@ -1955,88 +1901,35 @@ export default function SinaisIA() {
 
 
 
-            {/* ── Construtor de Estratégias (Filtros de Confluência) ── */}
+            {/* ── Estratégia Ativa ── */}
             <div style={{
                 background: '#0a0f16', border: '1px solid rgba(0,229,255,0.06)',
-                padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
+                padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Settings style={{ width: '15px', height: '15px', color: '#00e5ff' }} />
-                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>Construtor de Estratégias</span>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>Estratégia Ativa</span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
-                    {/* SuperTrend */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: activeFilters.supertrend ? '#00e5ff' : '#64748b', fontWeight: 700 }}>SuperTrend (ATR)</span>
-                        <div
-                            onClick={() => setActiveFilters(prev => ({ ...prev, supertrend: !prev.supertrend }))}
-                            style={{
-                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                                background: activeFilters.supertrend ? '#00e5ff' : '#1e293b'
-                            }}
-                        >
-                            <div style={{
-                                position: 'absolute', top: '2px', left: activeFilters.supertrend ? '16px' : '2px',
-                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                            }} />
-                        </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* Badge Estratégia 1 */}
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.25)',
+                        borderRadius: '10px', padding: '6px 14px',
+                    }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e5ff', boxShadow: '0 0 8px #00e5ff' }} />
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#00e5ff' }}>Estratégia 1 — SuperTrend</span>
                     </div>
-
-                    {/* RSI */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: activeFilters.rsi ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Força Relativa (RSI)</span>
-                        <div
-                            onClick={() => setActiveFilters(prev => ({ ...prev, rsi: !prev.rsi }))}
-                            style={{
-                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                                background: activeFilters.rsi ? '#00e5ff' : '#1e293b'
-                            }}
-                        >
-                            <div style={{
-                                position: 'absolute', top: '2px', left: activeFilters.rsi ? '16px' : '2px',
-                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                            }} />
-                        </div>
-                    </div>
-
-                    {/* MACD */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: activeFilters.macd ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Cruzamento MACD</span>
-                        <div
-                            onClick={() => setActiveFilters(prev => ({ ...prev, macd: !prev.macd }))}
-                            style={{
-                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                                background: activeFilters.macd ? '#00e5ff' : '#1e293b'
-                            }}
-                        >
-                            <div style={{
-                                position: 'absolute', top: '2px', left: activeFilters.macd ? '16px' : '2px',
-                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                            }} />
-                        </div>
-                    </div>
-
-                    {/* EMAs */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: activeFilters.emas ? '#00e5ff' : '#64748b', fontWeight: 700 }}>Alinhamento de Médias</span>
-                        <div
-                            onClick={() => setActiveFilters(prev => ({ ...prev, emas: !prev.emas }))}
-                            style={{
-                                width: '32px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                                background: activeFilters.emas ? '#00e5ff' : '#1e293b'
-                            }}
-                        >
-                            <div style={{
-                                position: 'absolute', top: '2px', left: activeFilters.emas ? '16px' : '2px',
-                                width: '14px', height: '14px', borderRadius: '50%', background: '#fff',
-                                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                            }} />
-                        </div>
-                    </div>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Período: <strong style={{ color: '#e2e8f0' }}>10</strong></span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Multiplicador: <strong style={{ color: '#e2e8f0' }}>3</strong></span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Gerenciamento: <strong style={{ color: '#00e676' }}>R:R 1:1.5</strong></span>
+                    <span style={{
+                        fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px',
+                        background: 'rgba(0,230,118,0.08)', color: '#00e676', border: '1px solid rgba(0,230,118,0.2)'
+                    }}>
+                        ✓ ATIVO
+                    </span>
                 </div>
             </div>
 

@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
-import { analyzeAssetWithSMA } from '@/services/dataFeed';
+import { analyzeStrategy1 } from '@/services/dataFeed';
 
 export async function GET() {
     try {
-        // Para simplificar no teste, usaremos hardcoded o ativo "MNQ" (Micro Nasdaq) no timeframe de "5m"
-        const analysis = await analyzeAssetWithSMA('MNQ', '5m');
+        // Teste da Estratégia 1 (SuperTrend) com dados mock
+        const mockCandles = Array.from({ length: 50 }).map((_, i) => {
+            const base = 17500 + i * 10;
+            return { high: base + 20, low: base - 20, close: base + (i % 2 === 0 ? 5 : -5) };
+        });
+
+        const analysis = analyzeStrategy1(mockCandles, 'MNQ', '5m');
 
         return NextResponse.json({
             success: true,
-            message: 'Análise simulada (Mock) gerada com sucesso!',
+            message: 'Estratégia 1 (SuperTrend) — Análise gerada com sucesso!',
             data: analysis
         });
     } catch (error) {
