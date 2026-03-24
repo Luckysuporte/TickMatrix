@@ -38,11 +38,19 @@ const SNIPER_ASSET_GROUPS = [
     {
         group: 'Forex',
         assets: [
-            { value: 'USD/CHF', label: 'USD/CHF', description: 'Dólar / Franco Suíço' },
-            { value: 'AUD/EUR', label: 'AUD/EUR', description: 'Dólar Australiano / Euro' },
-            { value: 'AUD/JPY', label: 'AUD/JPY', description: 'Dólar Australiano / Iene' },
-            { value: 'AUD/GBP', label: 'AUD/GBP', description: 'Dólar Australiano / Libra' },
             { value: 'EUR/USD', label: 'EUR/USD', description: 'Euro / Dólar Americano' },
+            { value: 'GBP/USD', label: 'GBP/USD', description: 'Libra / Dólar Americano' },
+            { value: 'USD/JPY', label: 'USD/JPY', description: 'Dólar / Iene Japonês' },
+            { value: 'USD/CHF', label: 'USD/CHF', description: 'Dólar / Franco Suíço' },
+            { value: 'AUD/USD', label: 'AUD/USD', description: 'Dólar Australiano / Dólar' },
+            { value: 'USD/CAD', label: 'USD/CAD', description: 'Dólar / Dólar Canadense' },
+            { value: 'NZD/USD', label: 'NZD/USD', description: 'Dólar Neozelandês / Dólar' },
+            { value: 'EUR/GBP', label: 'EUR/GBP', description: 'Euro / Libra' },
+            { value: 'EUR/JPY', label: 'EUR/JPY', description: 'Euro / Iene' },
+            { value: 'GBP/JPY', label: 'GBP/JPY', description: 'Libra / Iene' },
+            { value: 'AUD/JPY', label: 'AUD/JPY', description: 'Dólar Australiano / Iene' },
+            { value: 'AUD/EUR', label: 'AUD/EUR', description: 'Dólar Australiano / Euro' },
+            { value: 'AUD/GBP', label: 'AUD/GBP', description: 'Dólar Australiano / Libra' },
         ],
     },
     {
@@ -293,12 +301,13 @@ export default function SinaisIA() {
         } catch { return []; }
     });
 
-    // Ativos selecionados (padrão + customizados)
+    // Ativos selecionados (padrão: vazio — usuário escolhe manualmente)
     const [selectedSignalAssets, setSelectedSignalAssets] = useState<string[]>(() => {
         try {
             const saved = localStorage.getItem(LS_KEY);
-            return saved ? JSON.parse(saved) : ALL_SNIPER_VALUES;
-        } catch { return ALL_SNIPER_VALUES; }
+            // Se nunca foi salvo, começa vazio (não pré-seleciona nada)
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
     });
 
     const persist = async (selected: string[]) => {
@@ -413,13 +422,13 @@ export default function SinaisIA() {
                         localStorage.setItem(LS_KEY, JSON.stringify(botSettings.moedas_ativas));
                     }
                 } else if (error && error.code === 'PGRST116') {
-                    console.log('📦 [bot_settings] Registro não encontrado, criando padrão...');
+                    console.log('📦 [bot_settings] Registro não encontrado, criando padrão vazio...');
                     await supabase.from('bot_settings').insert({
                         id: 1,
-                        is_sniper_active: true, // Começar ativado por padrão conforme pedido do Erik
-                        moedas_ativas: ALL_SNIPER_VALUES
+                        is_sniper_active: false, // Começa desativado até o usuário configurar
+                        moedas_ativas: [] // Começa vazio — usuário seleciona manualmente
                     });
-                    setActive(true);
+                    setActive(false);
                 }
             } catch (err) {
                 console.error('[Supabase] Falha ao carregar bot_settings:', err);
@@ -499,7 +508,7 @@ export default function SinaisIA() {
 
             const payload = {
                 ativo: trade.asset,
-                timeframe: '5m',
+                timeframe: '1m', // TrendMatrix Sniper — M1
                 sinal_ia: trade.direction,
                 preco: String(trade.entryRaw || 0),
                 entry_price: trade.entryRaw,
@@ -756,68 +765,47 @@ export default function SinaisIA() {
         }));
     }, [historico]);
 
-    // Busca os 3 TFs de forma SEQUENCIAL (com delay) para evitar Rate Limit
+    // ── TrendMatrix Sniper 1.5x: busca M1 único ─────────────────────────────
     const fetchOne = async (fav: FavoriteAsset) => {
-        // Marcamos o início da busca IMEDIATAMENTE para evitar que watchdogs paralelos disparem
         lastUpdateMap.current[fav.value] = Date.now();
-        
+
         try {
-            // M5 primeiro — reaproveita os dados de preço, rsi, trend
-            const m5Data = await fetchTF(fav, '5m');
-            await delay(2000);
+            const m1Data = await fetchTF(fav, '1m');
 
-            const m15Data = await fetchTF(fav, '15m');
-            await delay(2000);
+            const signal: string = m1Data.signal ?? 'NEUTRO';
+            const isConfirmed: boolean = m1Data.isConfirmed ?? false;
 
-            const h1Data = await fetchTF(fav, '1h');
+            const currentPriceRaw: number = m1Data.priceRaw ?? 0;
+            const entryRaw: number = m1Data.entryRaw ?? currentPriceRaw;
+            const stopLossRaw: number = m1Data.stopLossRaw ?? 0;
+            const takeProfit1Raw: number = m1Data.takeProfit1Raw ?? 0;
+            const takeProfit2Raw: number = m1Data.takeProfit2Raw ?? 0;
+            const takeProfit3Raw: number = m1Data.takeProfit3Raw ?? 0;
+            const takeProfitRaw: number = takeProfit2Raw;
 
-            const m5: TFData = { signal: m5Data.signal, signalStrength: m5Data.signalStrength };
-            const m15: TFData = { signal: m15Data.signal, signalStrength: m15Data.signalStrength };
-            const h1: TFData = { signal: h1Data.signal, signalStrength: h1Data.signalStrength };
+            // Só dispara sinal se for COMPRA ou VENDA E confirmado (ST + AO)
+            const effectiveSignal = (signal === 'COMPRA' || signal === 'VENDA') && isConfirmed ? signal : 'NEUTRO';
 
-            const { stars, direction } = calcStars(m5, m15, h1);
             const oldSig = prevSignals.current[fav.value];
-
-            // Registrar nascimento do sinal (Timestamp de Virada)
             const now = new Date();
-            const oldStars = prevStarsMap.current[fav.value] || 0;
 
-            // Condição de Virada (Reset de Tempo): 
-            // 1. Mudou a DIREÇÃO (NEUTRO -> SINAL ou COMPRA <-> VENDA)
-            // 2. Mudou a FORÇA para ELITE (Upgrade para 3 estrelas)
-            const isDirectionInversion = (direction !== 'NEUTRO') && (
-                oldSig === undefined || 
-                oldSig === 'NEUTRO' || 
-                oldSig !== direction
+            const isDirectionInversion = effectiveSignal !== 'NEUTRO' && (
+                oldSig === undefined || oldSig === 'NEUTRO' || oldSig !== effectiveSignal
             );
 
-            const isEliteUpgrade = (direction !== 'NEUTRO') && (oldStars < 3 && stars === 3);
-
-            if (isDirectionInversion || isEliteUpgrade) {
+            if (isDirectionInversion) {
                 signalTimes.current[fav.value] = now;
             }
 
             const birthDate = signalTimes.current[fav.value] || now;
+            if (birthDate > now) signalTimes.current[fav.value] = now;
 
-            // Filtro de Sinais Fantasmas: Se o sinal vier do futuro (API drift), ajusta para agora
-            if (birthDate > now) {
-                signalTimes.current[fav.value] = now;
-            }
+            const oldDirection = prevSignals.current[fav.value];
+            prevSignals.current[fav.value] = effectiveSignal;
 
-            prevSignals.current[fav.value] = direction;
-            prevStarsMap.current[fav.value] = stars;
+            const changed = oldDirection !== undefined && oldDirection !== effectiveSignal;
 
-            const changed = oldSig !== undefined && (oldSig !== direction || oldStars !== stars);
-
-            const currentPriceRaw: number = m5Data.priceRaw ?? 0;
-            const entryRaw: number = m5Data.entryRaw ?? currentPriceRaw;
-            const stopLossRaw: number = m5Data.stopLossRaw ?? 0;
-            const takeProfit1Raw: number = m5Data.takeProfit1Raw ?? 0;
-            const takeProfit2Raw: number = m5Data.takeProfit2Raw ?? 0;
-            const takeProfit3Raw: number = m5Data.takeProfit3Raw ?? 0;
-            const takeProfitRaw: number = takeProfit2Raw; // Mantém fallback/legacy
-
-            // ── Verificar trades abertos deste ativo ─────────────────────────
+            // ── Verificar e atualizar trades em andamento ────────────────────
             if (currentPriceRaw > 0) {
                 setActiveTrades(prev => {
                     const next = prev.map(trade => {
@@ -828,15 +816,12 @@ export default function SinaisIA() {
 
                         let maxPriceRaw = currentPriceRaw;
                         let minPriceRaw = currentPriceRaw;
-
-                        // Captura High e Low caso o preço tenha cruzado o alvo entre os intervalos da API
-                        const ext = m5Data as any;
+                        const ext = m1Data as any;
                         if (ext.currentHigh !== undefined && ext.currentLow !== undefined) {
                             maxPriceRaw = ext.currentHigh;
                             minPriceRaw = ext.currentLow;
                         }
 
-                        // Atualiza maior alvo atingido usando MAX PRICE e MIN PRICE para ignorar ruído
                         if (isBuy) {
                             if (maxPriceRaw >= trade.takeProfit3Raw) maxT = Math.max(maxT, 3);
                             else if (maxPriceRaw >= trade.takeProfit2Raw) maxT = Math.max(maxT, 2);
@@ -847,91 +832,87 @@ export default function SinaisIA() {
                             else if (minPriceRaw <= trade.takeProfit1Raw) maxT = Math.max(maxT, 1);
                         }
 
-                        // Verifica Full Gain (Target 3)
                         const isFullGain = maxT === 3;
-
-                        // Verifica Stop Loss
-                        // Se maxT > 0, o SL vira Breakeven (preço de entrada)
                         const currentStopLoss = maxT > 0 ? trade.entryRaw : trade.stopLossRaw;
-
-                        const isStop = isBuy
-                            ? minPriceRaw <= currentStopLoss
-                            : maxPriceRaw >= currentStopLoss;
+                        const isStop = isBuy ? minPriceRaw <= currentStopLoss : maxPriceRaw >= currentStopLoss;
 
                         if (isFullGain || isStop) {
-                            // Definir o resultado
                             let resultado: 'GAIN' | 'STOP' | 'BREAKEVEN';
-                            if (isFullGain) {
-                                resultado = 'GAIN';
-                            } else if (maxT > 0) {
-                                resultado = 'BREAKEVEN';
-                            } else {
-                                resultado = 'STOP';
-                            }
+                            if (isFullGain) resultado = 'GAIN';
+                            else if (maxT > 0) resultado = 'BREAKEVEN';
+                            else resultado = 'STOP';
 
-                            // Cálculo de pontos
                             let points = 0;
-                            if (resultado === 'GAIN') {
-                                points = Math.abs(trade.takeProfit3Raw - trade.entryRaw);
-                            } else if (resultado === 'STOP') {
-                                points = -Math.abs(trade.stopLossRaw - trade.entryRaw);
-                            } // BREAKEVEN = 0 pontos
+                            if (resultado === 'GAIN') points = Math.abs(trade.takeProfit3Raw - trade.entryRaw);
+                            else if (resultado === 'STOP') points = -Math.abs(trade.stopLossRaw - trade.entryRaw);
 
                             const closed: ActiveTrade = {
                                 ...trade,
                                 maxTargetReached: maxT,
-                                status: resultado === 'BREAKEVEN' ? 'STOP' : resultado, // UI trata BREAKEVEN na listagem de recents apenas
+                                status: resultado === 'BREAKEVEN' ? 'STOP' : resultado,
                                 closePrice: currentPriceRaw,
                                 points,
                             };
-
-                            // Fechar no DB preservando o tipo exato incluindo BREAKEVEN
                             closeTradeInSupabase(closed, currentPriceRaw, resultado).then(() => fetchHistorico());
                             return closed;
                         }
 
-                        // Trade segue aberto com atualização do target
-                        if (maxT !== trade.maxTargetReached) {
-                            return { ...trade, maxTargetReached: maxT };
-                        }
-
+                        if (maxT !== trade.maxTargetReached) return { ...trade, maxTargetReached: maxT };
                         return trade;
                     });
                     return next;
                 });
             }
 
-            // ── Registrar ou Atualizar trade ao detectar mudança ────────────
-            if (changed && (direction === 'COMPRA' || direction === 'VENDA') && stopLossRaw > 0) {
+            // ── Registrar novo trade ao detectar sinal confirmado ────────────
+            if (changed && (effectiveSignal === 'COMPRA' || effectiveSignal === 'VENDA') && stopLossRaw > 0) {
                 setActiveTrades(prev => {
-                    // Singleton: Buscamos se JÁ existe um tracking ABERTO para este ativo
                     const existingIndex = prev.findIndex(t => t.asset === fav.value && t.status === 'ACOMPANHANDO');
                     const existingTrade = existingIndex > -1 ? prev[existingIndex] : null;
 
                     if (isDirectionInversion || !existingTrade) {
-                        // NOVA DIREÇÃO ou NOVO SINAL -> INSERT
+                        // Fechar trade invertido ("Stop no Tempo" / "Reversão")
+                        if (isDirectionInversion && existingTrade) {
+                            const isBuy = existingTrade.direction === 'COMPRA';
+                            // Na inversão, se andou a favor é GAIN (parcial), se contra é STOP
+                            const isGain = isBuy 
+                                ? currentPriceRaw > existingTrade.entryRaw 
+                                : currentPriceRaw < existingTrade.entryRaw;
+                            
+                            const pointsRaw = Math.abs(currentPriceRaw - existingTrade.entryRaw);
+                            const calcPoints = isGain ? pointsRaw : -pointsRaw;
+                            const resultado = isGain ? 'GAIN' : 'STOP';
+
+                            const closedTrade: ActiveTrade = {
+                                ...existingTrade,
+                                status: resultado,
+                                closePrice: currentPriceRaw,
+                                points: calcPoints,
+                            };
+                            
+                            // Dispara fechamento real no Supabase
+                            closeTradeInSupabase(closedTrade, currentPriceRaw, resultado).then(() => fetchHistorico());
+                        }
+
                         const uniqueTradeId = crypto.randomUUID();
-                        
-                        // Remove qualquer 'ABERTO' antigo do mesmo ativo (segurança extra)
                         const cleanPrev = prev.filter(t => !(t.asset === fav.value && t.status === 'ACOMPANHANDO'));
-                        
+
                         const newTrade: ActiveTrade = {
                             id: uniqueTradeId,
                             asset: fav.value,
-                            direction: direction as 'COMPRA' | 'VENDA',
+                            direction: effectiveSignal as 'COMPRA' | 'VENDA',
                             entryRaw,
                             stopLossRaw,
                             takeProfit1Raw,
                             takeProfit2Raw,
                             takeProfit3Raw,
                             takeProfitRaw,
-                            signalTime: signalTimes.current[fav.value] || new Date(),
-                            openTime: new Date(),
-                            stars,
+                            signalTime: signalTimes.current[fav.value] || now,
+                            openTime: now,
+                            stars: 1, // TrendMatrix usa confirmação binária, não estrelas
                             status: 'ACOMPANHANDO',
                         };
 
-                        // Persiste abertura no Supabase
                         openTradeInSupabase(newTrade).then(supabaseId => {
                             setActiveTrades(current => {
                                 if (current.some(c => c.id === uniqueTradeId)) return current;
@@ -942,35 +923,18 @@ export default function SinaisIA() {
 
                         return [newTrade, ...cleanPrev].slice(0, 20);
                     } else {
-                        // MESMA DIREÇÃO (Upgrade ou Downgrade de Força) -> UPDATE In-place
-                        const updatedSignalTime = isEliteUpgrade ? (signalTimes.current[fav.value] || existingTrade.signalTime) : existingTrade.signalTime;
-                        
                         const updatedTrade = {
                             ...existingTrade,
-                            stars,
-                            entryRaw,
-                            stopLossRaw,
-                            takeProfit1Raw,
-                            takeProfit2Raw,
-                            takeProfit3Raw,
-                            takeProfitRaw,
-                            signalTime: updatedSignalTime,
+                            entryRaw, stopLossRaw,
+                            takeProfit1Raw, takeProfit2Raw, takeProfit3Raw, takeProfitRaw,
                         };
-
-                        // Sincroniza Update no Supabase (silencioso)
                         if (existingTrade.supabaseId) {
                             supabase.from('trading_history').update({
-                                stars_at_entry: stars,
-                                entry_price: entryRaw,
-                                stop_loss: stopLossRaw,
-                                signal_time: updatedSignalTime.toISOString(),
-                                take_profit_1: takeProfit1Raw,
-                                take_profit_2: takeProfit2Raw,
-                                take_profit_3: takeProfit3Raw,
-                                take_profit: takeProfit3Raw,
+                                entry_price: entryRaw, stop_loss: stopLossRaw,
+                                take_profit_1: takeProfit1Raw, take_profit_2: takeProfit2Raw,
+                                take_profit_3: takeProfit3Raw, take_profit: takeProfit3Raw,
                             }).eq('id', existingTrade.supabaseId).then(() => fetchHistorico());
                         }
-
                         const newActive = [...prev];
                         newActive[existingIndex] = updatedTrade;
                         return newActive;
@@ -978,34 +942,30 @@ export default function SinaisIA() {
                 });
             }
 
-            if (changed) {
-                if (active) playAlert(stars, direction === 'COMPRA' ? 'buy' : 'sell');
-            } else if (stars === 3 && oldSig === undefined) {
-                if (active) playAlert(3, direction === 'COMPRA' ? 'buy' : 'sell');
+            if (changed && effectiveSignal !== 'NEUTRO') {
+                if (active) playAlert(1, effectiveSignal === 'COMPRA' ? 'buy' : 'sell');
             }
 
             setRadarData(prev => ({
                 ...prev,
                 [fav.value]: {
                     asset: fav,
-                    price: m5Data.price ?? '—',
-                    rsi14: m5Data.rsi14 ?? '—',
-                    trend: m5Data.trend ?? '—',
-                    m5, m15, h1,
-                    stars,
-                    signal: direction,
-                    signalStrength: m5.signalStrength,
+                    price: m1Data.price ?? '—',
+                    rsi14: m1Data.rsi14 ?? '—',
+                    trend: m1Data.trend ?? '—',
+                    m5: { signal: effectiveSignal, signalStrength: isConfirmed ? 'FORTE' : 'NEUTRO' },
+                    m15: null,
+                    h1: null,
+                    stars: 1,
+                    signal: effectiveSignal,
+                    signalStrength: isConfirmed ? 'FORTE' : 'NEUTRO',
                     loading: false,
                     error: false,
-                    flashing: changed,
+                    flashing: changed && effectiveSignal !== 'NEUTRO',
                     lastUpdate: new Date(),
                     signalStartTime: signalTimes.current[fav.value] || null,
-                    entryRaw,
-                    stopLossRaw,
-                    takeProfit1Raw,
-                    takeProfit2Raw,
-                    takeProfit3Raw,
-                    takeProfitRaw,
+                    entryRaw, stopLossRaw,
+                    takeProfit1Raw, takeProfit2Raw, takeProfit3Raw, takeProfitRaw,
                 },
             }));
 
@@ -1013,11 +973,7 @@ export default function SinaisIA() {
                 setTimeout(() => setRadarData(prev => ({ ...prev, [fav.value]: { ...prev[fav.value], flashing: false } })), 2500);
             }
         } catch (err) {
-            // Log silencioso no console para diagnóstico (sem exibir erro na UI)
-            console.error(`[Radar] Falha ao buscar ${fav.value}:`, err instanceof Error ? err.message : err);
-
-            // Preserva os ÚLTIMOS dados conhecidos e não exibe erro na tela.
-            // A próxima tentativa automática ocorrerá em 120s.
+            console.error(`[Sniper] Falha ao buscar ${fav.value}:`, err instanceof Error ? err.message : err);
             setRadarData(prev => ({
                 ...prev,
                 [fav.value]: {
@@ -1025,10 +981,12 @@ export default function SinaisIA() {
                         asset: fav, price: '—', rsi14: '—', trend: '—',
                         m5: null, m15: null, h1: null, stars: 0,
                         signal: '—', signalStrength: '—', flashing: false, lastUpdate: null,
-                        entryRaw: 0, stopLossRaw: 0, takeProfit1Raw: 0, takeProfit2Raw: 0, takeProfit3Raw: 0, takeProfitRaw: 0,
+                        entryRaw: 0, stopLossRaw: 0, takeProfit1Raw: 0,
+                        takeProfit2Raw: 0, takeProfit3Raw: 0, takeProfitRaw: 0,
                     }),
                     loading: false,
-                    error: false, // silencioso — dados anteriores ficam na tela
+                    error: false,
+                    signalStartTime: null,
                 },
             }));
         }
