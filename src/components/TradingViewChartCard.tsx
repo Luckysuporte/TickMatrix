@@ -61,9 +61,10 @@ interface Props {
     change: string;
     high: string;
     low: string;
+    studies?: string[];
 }
 
-export default function TradingViewChartCard({ assetValue, assetLabel, timeframe, price, change, high, low }: Props) {
+export default function TradingViewChartCard({ assetValue, assetLabel, timeframe, price, change, high, low, studies }: Props) {
     const widgetRef = useRef<HTMLDivElement>(null);
 
     // Normalize: remove slash so "XAU/USD" → "XAUUSD" for map lookup
@@ -100,9 +101,9 @@ export default function TradingViewChartCard({ assetValue, assetLabel, timeframe
             backgroundColor: '#0a0d12',
             gridColor: 'rgba(255,255,255,0.03)',
             hide_top_toolbar: false,
-            allow_symbol_change: false,
+            allow_symbol_change: true,
             save_image: false,
-            studies: ['STD;RSI', 'STD;MACD'],
+            studies: studies ?? ['STD;RSI', 'STD;MACD'],
             support_host: 'https://www.tradingview.com',
         });
 

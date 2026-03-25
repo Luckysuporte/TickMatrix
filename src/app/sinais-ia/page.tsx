@@ -5,6 +5,7 @@ import { Zap, Crown, Lock, TrendingUp, TrendingDown, Star, Radio, RefreshCw, Ale
 import { getFavorites, FavoriteAsset } from '@/lib/favorites';
 import { calculateSuggestedLot, calculateTargetProfit, getTickConfig } from '@/lib/riskCalc';
 import { supabase } from '@/lib/supabase';
+import TradingViewChartCard from '@/components/TradingViewChartCard';
 
 // ─── Sinais Recentes — mock demonstrativo XAU/USD ─────────
 const RECENT_SIGNALS: {
@@ -1185,6 +1186,22 @@ export default function SinaisIA() {
                     </p>
                 </div>
             </div>
+
+            {/* ════════════════════════════════════════
+                GRÁFICO EM TEMPO REAL (Primeiro Favorito)
+            ════════════════════════════════════════ */}
+            {favorites.length > 0 && radarData[favorites[0].value] && !radarData[favorites[0].value].loading && (
+                <TradingViewChartCard
+                    assetValue={favorites[0].value}
+                    assetLabel={favorites[0].label}
+                    timeframe="1m"
+                    price={radarData[favorites[0].value]?.price ?? '—'}
+                    change={'+0.00%'}
+                    high={'—'}
+                    low={'—'}
+                    studies={['Supertrend@tv-basicstudies', 'AwesomeOscillator@tv-basicstudies']}
+                />
+            )}
 
             {/* ════════════════════════════════════════
                 MEU RADAR — Score de Confluência
