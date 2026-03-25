@@ -1199,7 +1199,7 @@ export default function SinaisIA() {
                     change={'+0.00%'}
                     high={'—'}
                     low={'—'}
-                    studies={['Supertrend@tv-basicstudies', 'AwesomeOscillator@tv-basicstudies']}
+                    studies={['STD;Supertrend', 'AwesomeOscillator@tv-basicstudies']}
                 />
             )}
 
